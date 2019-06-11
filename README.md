@@ -1,7 +1,7 @@
 # WeatherMojo
-IoT project to get weather information from the web and display it on a weather station. The project is developed for a Particle Photon running Device OS 1.2.0-beta.1
+IoT project to get weather information from the web and display it on a weather station. 
 
-It periodically downloads OpenWeatherMap data and sets the position of stepper motors to display weather information on analog gauges. It's built for a Particle Photon running [DeviceOS 1.2.0-beta-1](https://github.com/particle-iot/device-os/releases/tag/v1.2.0-beta.1).
+It periodically downloads [OpenWeatherMap](http://openweathermap.org/) data and sets the position of stepper motors to display weather information on analog gauges. It's built for a Particle Photon running [DeviceOS 1.2.0-beta-1](https://github.com/particle-iot/device-os/releases/tag/v1.2.0-beta.1).
 
 Files:
 * [weathermojo.ino](./weathermojo.ino) : Firmware to run a weather station
