@@ -58,7 +58,7 @@ void setup()
     // set up the httpclient
     request.hostname = "api.openweathermap.org";
     request.port = 80;
-    request.path = "/data/2.5/weather?id=5308049&units=metric&APPID=2baaed8e221af7ed622d01bea51ba59e";
+    request.path = "/data/2.5/weather?id=5308049&units=metric&APPID=[YOUR OPENWEATHERMAP.ORG APP ID HERE]";
 
     // register our functions
     registerFunctions();
