@@ -1,6 +1,3 @@
-// This #include statement was automatically added by the Particle IDE.
-#include <Stepper.h>
-
 #include <Particle.h>
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <ArduinoJson.h>
