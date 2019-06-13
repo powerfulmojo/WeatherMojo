@@ -215,14 +215,10 @@ int refreshJson(String requestPath)
 {
     // use the global httpclient to request a path
     // requestType should be 1 for current conditions, 2 for forecast
-    //String conditionsPath = "/v2.0/current?key=5b822cc6043144ed98612881846d5d51&city_id=5308049&units=M";
-    //String forecastPath = "/v2.0/forecast/daily?key=5b822cc6043144ed98612881846d5d51&days=1&city_id=5308049&units=M";
-
     int returnVal = 0;
 
     if (makeActualCalls == 1)
     {
-        //request.path = "/v2.0/current?key=5b822cc6043144ed98612881846d5d51&city_id=5308049&units=M";
         request.path = requestPath;
         http.get(request, response, headers);
         int responseStatus = response.status;
@@ -242,7 +238,6 @@ int refreshJson(String requestPath)
                 Serial.printlnf(error.c_str());
                 returnVal = -1;
             }
-            //TODO: pull temp and dewpoint out of JSON
         }
         else
         {
