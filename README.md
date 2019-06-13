@@ -7,10 +7,10 @@ Build details at https://www.powerfulmojo.com/weather/
 
 Files:
 * [weathermojo.ino](./weathermojo.ino) : Firmware to run a weather station
-* [forecast_hi_mojo.ino](./forecast_hi_mojo.ino) : Firmware to run a weather station
+* [forecastmojo.ino](./forecastmojo.ino) : Firmware to run a weather station
 * [steppertest.ino](./steppertest.ino) : Firmware to mess with your stepper motors for testing and calibration
 
-The two firmwares use different weather APIs and use the high temperature stepper motor differently. [weathermojo.ino](./weathermojo.ino) uses [openweathermap.org](http://openweathermap.org/) and displays the highest temperature it has seen today. [forecast_hi_mojo.ino](./forecast_hi_mojo.ino) uses [weatherbit.io](http://weatherbit.io/) and displays today's forecast high.
+The two firmwares use different weather APIs and use the high temperature stepper motor differently. [weathermojo.ino](./weathermojo.ino) uses [openweathermap.org](http://openweathermap.org/) and displays the highest temperature it has seen today. [forecastmojo.ino](./forecastmojo.ino) uses [weatherbit.io](http://weatherbit.io/) and displays today's forecast high.
 
 It depends on:
 * [Stepper](https://github.com/arduino-libraries/Stepper) by [facchinm](https://github.com/facchinm)
