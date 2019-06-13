@@ -1,7 +1,7 @@
 #include <Particle.h>
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <ArduinoJson.h>
-#include "MyHttpClient.h"
+#include <HttpClient.h>
 #include <Stepper.h>
 
 // #include <math.h>
