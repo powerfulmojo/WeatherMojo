@@ -6,8 +6,8 @@ It periodically downloads data and sets the position of stepper motors to displa
 Build details at https://www.powerfulmojo.com/weather/
 
 Files:
-* [weathermojo.ino](./weathermojo.ino) : Firmware to run a weather station
-* [forecastmojo.ino](./forecastmojo.ino) : Firmware to run a weather station
+* [weathermojo.ino](./weathermojo.ino) : Firmware to run a weather station showing observed hi temp
+* [forecastmojo.ino](./forecastmojo.ino) : Firmware to run a weather station showing forecast hi temp
 * [steppertest.ino](./steppertest.ino) : Firmware to mess with your stepper motors for testing and calibration
 
 The two firmwares use different weather APIs and use the high temperature stepper motor differently. [weathermojo.ino](./weathermojo.ino) uses [openweathermap.org](http://openweathermap.org/) and displays the highest temperature it has seen today. [forecastmojo.ino](./forecastmojo.ino) uses [weatherbit.io](http://weatherbit.io/) and displays today's forecast high.
