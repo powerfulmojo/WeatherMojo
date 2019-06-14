@@ -1,0 +1,10 @@
+
+*.bin
+ArduinoJson.h
+ArduinoJson.hpp
+ArduinoJson/
+HttpClient.cpp
+HttpClient.h
+Stepper.cpp
+Stepper.h
+WeatherbitKey.h
