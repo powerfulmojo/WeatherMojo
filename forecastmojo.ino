@@ -1,32 +1,33 @@
 #include <Particle.h>
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <ArduinoJson.h>
-#include <HttpClient.h>
+#include "HttpClient.h"
 #include <Stepper.h>
+// Include your own weatherbit API key here
+// static const char[32] apiKey = "0123456789abcdef0123456789abcdef";
+#include "WeatherbitKey.h"
 
-// #include <math.h>
+// configure the boundaries of our gauges appropriate to Phoenix, AZ, US
+const float kMinDisplayTempC   = -6.67; // record low temp  -8.89 C ( 16 F) as of May 30, 2019
+const float kMaxDisplayTempC   = 48.89; // record high temp 50.00 C (122 F)
+const int   kTempDisplaySteps  = 455;   
+const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
+const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
+const int   kDewDisplaySteps   = 386;
 
-const float kMinDisplayTempC   = -4.0;  // record low temp  -8.89 C ( 16 F) as of May 30, 2019
-const float kMaxDisplayTempC   = 52.0;  // record high temp 50.00 C (122 F)
-const int   kTempDisplaySteps  = 450;   
-const float kMinDisplayDewC    = -30.44;// record low dew point -30.55 C (-23 F)
-const float kMaxDisplayDewC    = 26.67; // record high dew point 26.11 C ( 79 F)
-const int   kDewDisplaySteps   = 360;
-
-
+LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
-int pollingInterval = 20000; //milliseconds
+unsigned int pollingInterval = 600000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 
 double tempC = -273.15;
 double hiTempC = -273.15;
 double dewPointC = -273.15;
-char apiKey[33] = "[YOUR WEATHERBIT.IO API KEY HERE]";
 
 // variables to handle the once-a-day hi temp forecast reset
 int lastHiTempReset = 0;      // weekday, 1=Sunday, 7=Saturday
-int hiTempResetHour = 4;      // reset on the hour, this hour every day (0-23)
+int hiTempResetHour = 4;      // reset on this hour every day (0-23)
 
 //global httpclient stuff
 HttpClient http;
@@ -44,14 +45,13 @@ Stepper tempStepper(720, D1, D0, D2, D3); // X40 inner ring
 int tempStepperPosition = 0;
 int tempStepperRightPosition = 0;
 
-Stepper hiStepper(720, D5, D4, D6, D7); // X40 outer ring
+Stepper hiStepper(720, D4, D5, D6, D7); // X40 outer ring
 int hiStepperPosition = 0;
 int hiStepperRightPosition = 0;
 
-Stepper dewStepper(720, A0, A1, A2, A3); // X27
+Stepper dewStepper(720, A1, A0, A2, A3); // X27
 int dewStepperPosition = 0; 
 int dewStepperRightPosition = 0;
-
 
 void setup()
 {
@@ -73,17 +73,26 @@ void setup()
         hiStepper.step(-1);
         dewStepper.step(-1);
     }
-        
-    tempStepper.step(21);  // enough to reach horizontal (0) on each motor
-    hiStepper.step(88);
-    dewStepper.step(84);
     
-    tempStepperPosition = 0;
+    int tempStepperZero = 21;
+    int hiStepperZero = 88;
+    int dewStepperZero = 84;
+    
+    for (i = 0; i < max(tempStepperZero, max(hiStepperZero, dewStepperZero)); i++)
+    {
+        if (i < tempStepperZero) tempStepper.step(1); // enough to reach (0) on each scale
+        if (i < hiStepperZero) hiStepper.step(1);
+        if (i < dewStepperZero) dewStepper.step(1);
+    }
+
+    tempStepperPosition = 0; // call it zero
     hiStepperPosition = 0;
     dewStepperPosition = 0;
-       
-    delay(10000);
-    //TODO: Take contol of the on-board LED
+    
+    // turn off the breathing cyan LED. D7 will still tell us we have power  
+    theme.setColor(LED_SIGNAL_NETWORK_ON, 0x00000000); 
+    theme.apply(); 
+    
     registerFunctions();
 }
 
@@ -116,7 +125,11 @@ void loop()
         int successfulConditionsSet = resetTempAndDewPoint();
         if (successfulConditionsSet == 0)
         {
-            Serial.printlnf("SUCCESS: T %f C, D %f C", tempC, dewPointC);
+            char strLog[50] = "";
+            sprintf(strLog, "T: %3.2f (hi %3.2f) C\nDP: %3.2f C", tempC, hiTempC, dewPointC);
+            (verbosity > 0) && Particle.publish("Update", strLog, PRIVATE);
+            Serial.printlnf(strLog);
+            Particle.publish("Update", strLog);
         }
         else
         {
@@ -148,7 +161,6 @@ int resetTempAndDewPoint()
     int conditionsRefreshed = refreshJson(conditionsRequestPath);
     if (conditionsRefreshed == 0) 
     {
-        bool outOfBounds = false;
         double tC = weatherDoc["data"][0]["temp"];
         double dC = weatherDoc["data"][0]["dewpt"];
         Serial.printlnf("conditions retrieved: Temp %f C, DP %f C", tC, dC);
@@ -162,6 +174,7 @@ int resetTempAndDewPoint()
             returnVal = -1;
             Serial.printlnf("Temp not updated because %f is out of bounds", tC);
         }
+        
         if (dC > -65 && dC < 50) 
         {
             dewPointC = dC;
@@ -183,7 +196,7 @@ int resetTempAndDewPoint()
 int resetHiTemp()
 {
     // put a forecast in the json document 
-    // and set the hiTempC value
+    // if it's in a reasonable range, set the hiTempC value
     int returnVal = 0;
     
     Serial.printlnf("resetting hi temp");
@@ -199,11 +212,19 @@ int resetHiTemp()
         double htC = kMinDisplayTempC; // if this all fails, display min temp on the scale
         htC = weatherDoc["data"][0]["max_temp"];
         Serial.printlnf("hi temp is now %f", htC);
-        if (htC > -10 && htC < 55) hiTempC = htC;
+        if (htC > -10 && htC < 55) 
+        {
+            hiTempC = htC;
+        }
+        else 
+        {
+            Serial.println("out of bounds hi temp"); 
+            returnVal = -1;
+        }
     }
     else
     {
-        Serial.println("forecast refresh failed, will try again next polling interval");
+        Serial.println("forecast refresh failed");
         returnVal = -1;
     }
     return returnVal;
@@ -214,7 +235,6 @@ int resetHiTemp()
 int refreshJson(String requestPath)
 {
     // use the global httpclient to request a path
-    // requestType should be 1 for current conditions, 2 for forecast
     int returnVal = 0;
 
     if (makeActualCalls == 1)
@@ -243,6 +263,7 @@ int refreshJson(String requestPath)
         {
             Serial.printlnf("ERROR");
             Serial.printlnf(response.body);
+            returnVal = -1;
         }
     }
     else
@@ -294,40 +315,51 @@ void adjustMotors()
 {
     // to be called every loop
     // if any motor is a step or more away from its correct position, take one step in the right direction
-        // signbit: 1 if arg is negative, 0 otherwise
-        // if RightPosition > Position, we want + movement and signbit(RightPosition - Position) == 0
-        // if RightPosition < Position, we want - movement and signbit(Rightposition - Position) == 1
-        // so moveDirection = (-2 * signbit(RightPosition - Position)) + 1;
-
-    //TIWIAGTH: there's a bug in here, all 3 values run away toward positive
+    // if a motor is already at its min or max position, don't take more steps in that direction
     int moveDirection;
     if (abs(tempStepperRightPosition - tempStepperPosition) >= 1) // if motors are a step or more away from their correct position
     {
-
-        char strLog[45] = "";
-        sprintf(strLog, "Before: P=%d RP=%d", tempStepperPosition, tempStepperRightPosition);
-        Serial.printlnf(strLog);
-
-        moveDirection = (-2 * signbit(tempStepperRightPosition - tempStepperPosition)) + 1; 
-        tempStepper.step(moveDirection);
-        tempStepperPosition = tempStepperPosition + moveDirection;
+        int difference = (tempStepperRightPosition - tempStepperPosition);
+        moveDirection = ((difference > 0) - (difference < 0));
         
-        sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
-        Serial.printlnf(strLog);
+        char strLog[45] = ""; // in case we need to log anything
+            
+        if (verbosity > 1) 
+        {
+            sprintf(strLog, "Before: P=%d RP=%d", tempStepperPosition, tempStepperRightPosition);
+            Serial.printlnf(strLog);
+            Serial.printlnf("Moving %d steps", moveDirection);
+        }
+        if ((tempStepperPosition + moveDirection) >= 0 && tempStepperPosition + moveDirection <= kTempDisplaySteps)
+        {
+            tempStepper.step(moveDirection);
+            tempStepperPosition = tempStepperPosition + moveDirection;
+            sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
+            (verbosity > 1) && Serial.printlnf(strLog);
+        }
     }
     if (abs(hiStepperRightPosition   - hiStepperPosition)   >= 1) 
     {
-        moveDirection = (-2 * signbit(hiStepperRightPosition - hiStepperPosition)) + 1;
-        hiStepper.step(moveDirection);
-        hiStepperPosition = hiStepperPosition + moveDirection;
+        moveDirection = (((hiStepperRightPosition - hiStepperPosition) > 0) - ((hiStepperRightPosition - hiStepperPosition) < 0));
+        if ((hiStepperPosition + moveDirection) >= 0 && hiStepperPosition + moveDirection <= kTempDisplaySteps)
+        {
+            hiStepper.step(moveDirection);
+            hiStepperPosition = hiStepperPosition + moveDirection;
+        }
     }
     if (abs(dewStepperRightPosition  - dewStepperPosition)  >= 1) 
     {
-        moveDirection = (-2 * signbit(dewStepperRightPosition - dewStepperPosition)) + 1;
-        dewStepper.step(moveDirection);
-        dewStepperPosition = dewStepperPosition + moveDirection;
+        moveDirection = (((dewStepperRightPosition - dewStepperPosition) > 0) - ((dewStepperRightPosition - dewStepperPosition) < 0));
+        
+        if ((dewStepperPosition + moveDirection) >= 0 && dewStepperPosition + moveDirection <= kDewDisplaySteps)
+        {
+            dewStepper.step(moveDirection);
+            dewStepperPosition = dewStepperPosition + moveDirection;
+        }
     }
 }
+
+
 
 void registerFunctions()
 {
@@ -363,13 +395,14 @@ int setPollingInterval(String command)
 
 int trimTempMotor(String command)
 {
-    //TODO: add error handling
-    double steps = command.toFloat();
+    // move the motor, but do not update the variable with its current position
+    // useful to calibrate the needle on a running display
+    int steps = command.toInt();
     tempStepper.step(steps);
     if (verbosity >= 1)
     {
         char strLog[25] = "";
-        sprintf(strLog, "Moved Temp motor %3.1f steps", steps);
+        sprintf(strLog, "Moved Temp motor %d steps", steps);
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
@@ -377,13 +410,14 @@ int trimTempMotor(String command)
 
 int trimHiTempMotor(String command)
 {
-    //TODO: add error handling
-    double steps = command.toFloat();
+    // move the motor, but do not update the variable with its current position
+    // useful to calibrate the needle on a running display
+    int steps = command.toInt();
     hiStepper.step(steps);
     if (verbosity >= 1)
     {
         char strLog[25] = "";
-        sprintf(strLog, "Moved Temp motor %3.1f steps", steps);
+        sprintf(strLog, "Moved Temp motor %d steps", steps);
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
@@ -391,19 +425,15 @@ int trimHiTempMotor(String command)
 
 int trimDewMotor(String command)
 {
-    //TODO: add error handling
-    double steps = command.toFloat();
+    // move the motor, but do not update the variable with its current position
+    // useful to calibrate the needle on a running display
+    int steps = command.toInt();
     dewStepper.step(steps);
     if (verbosity >= 1)
     {
         char strLog[25] = "";
-        sprintf(strLog, "Moved Temp motor %3.1f steps", steps);
+        sprintf(strLog, "Moved Temp motor %d steps", steps);
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
 }
-
-
-
-
-
