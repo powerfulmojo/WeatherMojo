@@ -10,7 +10,7 @@
 // configure the boundaries of our gauges appropriate to Phoenix, AZ, US
 const float kMinDisplayTempC   = -6.67; // record low temp  -8.89 C ( 16 F) as of May 30, 2019
 const float kMaxDisplayTempC   = 48.89; // record high temp 50.00 C (122 F)
-const int   kTempDisplaySteps  = 455;   
+const int   kTempDisplaySteps  = 458;   
 const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
 const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
 const int   kDewDisplaySteps   = 386;
@@ -18,7 +18,7 @@ const int   kDewDisplaySteps   = 386;
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
-unsigned int pollingInterval = 20000; //milliseconds
+unsigned int pollingInterval = 900000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 
 double tempC = -273.15;
@@ -74,8 +74,8 @@ void setup()
         dewStepper.step(-1);
     }
     
-    int tempStepperZero = 21;
-    int hiStepperZero = 88;
+    int tempStepperZero = 20;
+    int hiStepperZero = 80;
     int dewStepperZero = 84;
     
     for (i = 0; i < max(tempStepperZero, max(hiStepperZero, dewStepperZero)); i++)
@@ -370,6 +370,8 @@ void registerFunctions()
     success ? Serial.println("Registered trim_hitemp") : Serial.println("Failed to register trim_hitemp");
     success = Particle.function("trim_dew", trimDewMotor);
     success ? Serial.println("Registered trim_dew") : Serial.println("Failed to register trim_dew");
+    success = Particle.function("set_hi_needle", setHiMotor);
+    success ? Serial.println("Registered set_hi_needle") : Serial.println("Failed to register trim_dew");
 }
 
 int setPollingInterval(String command)
@@ -434,3 +436,19 @@ int trimDewMotor(String command)
     }
     return 0;
 }
+
+int setHiMotor(String command)
+{
+    // set the high motor to a temp (Celsius)
+    int newTemp = command.toInt();
+    hiStepperRightPosition = tempToPosition(newTemp);
+    if (verbosity >= 1)
+    {
+        char strLog[25] = "";
+        sprintf(strLog, "Set hi temp %d (%d)", newTemp, hiStepperRightPosition);
+        Particle.publish("Command", strLog, PRIVATE);
+    }
+    return 0;
+    
+}
+
