@@ -8,3 +8,9 @@ HttpClient.h
 Stepper.cpp
 Stepper.h
 WeatherbitKey.h
+project.properties
+*.ipch
+.vscode/
+target/
+*.cpp
+openweathermapkey.h
