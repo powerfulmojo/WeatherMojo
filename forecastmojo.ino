@@ -128,7 +128,7 @@ void loop()
             char strLog[50] = "";
             sprintf(strLog, "T: %3.2f (hi %3.2f) C\nDP: %3.2f C", tempC, hiTempC, dewPointC);
             Serial.printlnf(strLog);
-            (verbosity > 0) && Particle.publish("Update", strLog, PRIVATE);
+            (verbosity > 0) && Particle.publish("Updated", strLog, PRIVATE);
         }
         else
         {
@@ -143,7 +143,7 @@ void loop()
     } // end if polling interval
     
     // every loop we get the motors a little closer to their correct position
-    //adjustMotors();
+    adjustMotors();
 }
 
 int resetTempAndDewPoint()
@@ -374,12 +374,16 @@ void registerFunctions()
 
 int setPollingInterval(String command)
 {
-    int newMs = command.toInt();
-    if (newMs < 5000) newMs = 900000;
+     int newMs = command.toInt();
+    if (newMs < 5000) 
+    {
+        // that's too small, let's be reasonable
+        newMs = 900000;
+    }
     pollingInterval = newMs;
     if (verbosity >= 1)
     {
-        char strLog[25] = "";
+        char strLog[45] = "";
         sprintf(strLog, "Set polling interval to %d ms", newMs);
         Particle.publish("Command", strLog, PRIVATE);
     }
@@ -430,6 +434,3 @@ int trimDewMotor(String command)
     }
     return 0;
 }
-
-
-
