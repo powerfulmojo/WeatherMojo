@@ -4,21 +4,23 @@
 #include <HttpClient.h>
 #include <math.h>
 #include <Stepper.h>
+#include "openweathermapkey.h" // file that sets apiKey to your api key
+// or char apiKey[33] = "01234567890abcdef01234567890abcdef";
 
 const float kDewPointBNoUnit   = 17.67;
 const float kDewPointCDegC     = 243.5;
-const float kMinDisplayTempC   = -4.0;  // record low temp  -8.89 C ( 16 F) as of May 30, 2019
-const float kMaxDisplayTempC   = 52.0;  // record high temp 50.00 C (122 F)
-const int   kTempDisplaySteps  = 450;   
-const float kMinDisplayDewC    = -30.44;// record low dew point -30.55 C (-23 F)
-const float kMaxDisplayDewC    = 26.67; // record high dew point 26.11 C ( 79 F)
-const int   kDewDisplaySteps   = 360;
+const float kMinDisplayTempC   = -6.67;  // record low temp  -8.89 C ( 16 F) as of May 30, 2019
+const float kMaxDisplayTempC   = 48.89;  // record high temp 50.00 C (122 F)
+const int   kTempDisplaySteps  = 455;   
+const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
+const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
+const int   kDewDisplaySteps   = 386;
 
 int verbosity = 1;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
 int lastHiTempReset = 0;      // weekday, 1=Sunday, 7=Saturday
 int hiTempResetHour = 9;      // reset on the hour, this hour every day (0-23)
-int pollingInterval = 900000; //milliseconds
+unsigned int pollingInterval = 900000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 
 double tempC = -273.15;
@@ -36,17 +38,16 @@ http_response_t response;
 
 StaticJsonDocument<600> doc;
 
-
 // Set up the gauge motors
 Stepper tempStepper(720, D1, D0, D2, D3); // X40 inner ring
 int tempStepperPosition = 0;
 int tempStepperRightPosition = 0;
 
-Stepper hiStepper(720, D5, D4, D6, D7); // X40 outer ring
+Stepper hiStepper(720, D4, D5, D6, D7); // X40 outer ring
 int hiStepperPosition = 0;
 int hiStepperRightPosition = 0;
 
-Stepper dewStepper(720, A0, A1, A2, A3); // X27
+Stepper dewStepper(720, A1, A0, A2, A3); // X27
 int dewStepperPosition = 0; 
 int dewStepperRightPosition = 0;
 
@@ -58,15 +59,17 @@ void setup()
     // set up the httpclient
     request.hostname = "api.openweathermap.org";
     request.port = 80;
-    request.path = "/data/2.5/weather?id=5308049&units=metric&APPID=[YOUR OPENWEATHERMAP.ORG APP ID HERE]";
+    char reqPath[100];
+    sprintf(reqPath, "/data/2.5/weather?id=5308049&units=metric&APPID=%s", apiKey);
+    request.path=reqPath;
 
     // register our functions
     registerFunctions();
     
     // set up our steppers
-    tempStepper.setSpeed(40);
-    hiStepper.setSpeed(40);
-    dewStepper.setSpeed(40);
+    tempStepper.setSpeed(5);
+    hiStepper.setSpeed(5);
+    dewStepper.setSpeed(5);
     
     int i;
     for (i = 0; i < 630; i++) 
@@ -76,9 +79,9 @@ void setup()
         dewStepper.step(-1);
     }
         
-    tempStepper.step(100);  // enough to reach horizontal (0) on each motor
-    hiStepper.step(100);
-    dewStepper.step(100);
+    tempStepper.step(21);  // enough to reach horizontal (0) on each motor
+    hiStepper.step(88);
+    dewStepper.step(84);
     
     tempStepperPosition = 0;
     hiStepperPosition = 0;
@@ -311,7 +314,7 @@ int takeSteps(String command)
     if (verbosity >= 1)
     {
         char strLog[25] = "";
-        sprintf(strLog, "Moved motor %3.1f steps", steps);
+        sprintf(strLog, "Moved motor %d steps", steps);
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
@@ -363,8 +366,51 @@ int setVerbosity(String command)
 }
 
 
+void adjustMotors()
+{
+    // to be called every loop
+    // if any motor is a step or more away from its correct position, take one step in the right direction
+    // if a motor is already at its min or max position, don't take more steps in that direction
+    int moveDirection;
+    if (abs(tempStepperRightPosition - tempStepperPosition) >= 1) // if motors are a step or more away from their correct position
+    {
+        int difference = (tempStepperRightPosition - tempStepperPosition);
+        moveDirection = ((difference > 0) - (difference < 0));
+        
+        char strLog[45] = ""; // in case we need to log anything
+            
+        if ((tempStepperPosition + moveDirection) >= 0 && tempStepperPosition + moveDirection <= kTempDisplaySteps)
+        {
+            tempStepper.step(moveDirection);
+            tempStepperPosition = tempStepperPosition + moveDirection;
+            sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
+            (verbosity > 1) && Serial.printlnf(strLog);
+        }
+    }
+    if (abs(hiStepperRightPosition   - hiStepperPosition)   >= 1) 
+    {
+        moveDirection = (((hiStepperRightPosition - hiStepperPosition) > 0) - ((hiStepperRightPosition - hiStepperPosition) < 0));
+        if ((hiStepperPosition + moveDirection) >= 0 && hiStepperPosition + moveDirection <= kTempDisplaySteps)
+        {
+            hiStepper.step(moveDirection);
+            hiStepperPosition = hiStepperPosition + moveDirection;
+        }
+    }
+    if (abs(dewStepperRightPosition  - dewStepperPosition)  >= 1) 
+    {
+        moveDirection = (((dewStepperRightPosition - dewStepperPosition) > 0) - ((dewStepperRightPosition - dewStepperPosition) < 0));
+        
+        if ((dewStepperPosition + moveDirection) >= 0 && dewStepperPosition + moveDirection <= kDewDisplaySteps)
+        {
+            dewStepper.step(moveDirection);
+            dewStepperPosition = dewStepperPosition + moveDirection;
+        }
+    }
+}
 
 //TODO: finish the single-step-per-loop implementation
+//TODO: add "last updated" variable
+//TODO: add motor trim functions for on-the-fly calibration
 //TODO: replace observed hi temp with forecast hi temp
 //http://api.weatherbit.io/v2.0/forecast/daily?key=5b822cc6043144ed98612881846d5d51&days=1&city_id=5308049&units=M
 //http://api.weatherbit.io/v2.0/current?key=5b822cc6043144ed98612881846d5d51&city_id=5308049&units=M

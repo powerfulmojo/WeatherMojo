@@ -18,7 +18,7 @@ const int   kDewDisplaySteps   = 386;
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
-unsigned int pollingInterval = 600000; //milliseconds
+unsigned int pollingInterval = 20000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 
 double tempC = -273.15;
@@ -127,9 +127,8 @@ void loop()
         {
             char strLog[50] = "";
             sprintf(strLog, "T: %3.2f (hi %3.2f) C\nDP: %3.2f C", tempC, hiTempC, dewPointC);
-            (verbosity > 0) && Particle.publish("Update", strLog, PRIVATE);
             Serial.printlnf(strLog);
-            Particle.publish("Update", strLog);
+            (verbosity > 0) && Particle.publish("Update", strLog, PRIVATE);
         }
         else
         {
@@ -144,7 +143,7 @@ void loop()
     } // end if polling interval
     
     // every loop we get the motors a little closer to their correct position
-    adjustMotors();
+    //adjustMotors();
 }
 
 int resetTempAndDewPoint()
@@ -261,7 +260,7 @@ int refreshJson(String requestPath)
         }
         else
         {
-            Serial.printlnf("ERROR");
+            Serial.printlnf("Error Response %d", response.status);
             Serial.printlnf(response.body);
             returnVal = -1;
         }
@@ -324,12 +323,6 @@ void adjustMotors()
         
         char strLog[45] = ""; // in case we need to log anything
             
-        if (verbosity > 1) 
-        {
-            sprintf(strLog, "Before: P=%d RP=%d", tempStepperPosition, tempStepperRightPosition);
-            Serial.printlnf(strLog);
-            Serial.printlnf("Moving %d steps", moveDirection);
-        }
         if ((tempStepperPosition + moveDirection) >= 0 && tempStepperPosition + moveDirection <= kTempDisplaySteps)
         {
             tempStepper.step(moveDirection);
@@ -369,7 +362,7 @@ void registerFunctions()
     Particle.variable("MakeActualCalls", makeActualCalls);
     
     bool success = false;
-    success = Particle.function("polling_mojo",   setPollingInterval);
+    success = Particle.function("polling_mojo", setPollingInterval);
     success ? Serial.println("Registered polling_mojo") : Serial.println("Failed to register polling_mojo");
     success = Particle.function("trim_temp", trimTempMotor);
     success ? Serial.println("Registered trim_temp") : Serial.println("Failed to register trim_temp");
@@ -437,3 +430,6 @@ int trimDewMotor(String command)
     }
     return 0;
 }
+
+
+
