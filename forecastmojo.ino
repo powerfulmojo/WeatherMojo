@@ -90,7 +90,7 @@ void setup()
     dewStepperPosition = 0;
     
     // turn off the breathing cyan LED. D7 will still tell us we have power  
-    theme.setColor(LED_SIGNAL_NETWORK_ON, 0x00000000); 
+    theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
     theme.apply(); 
     
     registerFunctions();
