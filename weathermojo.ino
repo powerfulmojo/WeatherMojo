@@ -20,8 +20,9 @@ int verbosity = 1;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
 int lastHiTempReset = 0;      // weekday, 1=Sunday, 7=Saturday
 int hiTempResetHour = 9;      // reset on the hour, this hour every day (0-23)
-unsigned int pollingInterval = 900000; //milliseconds
+int pollingInterval = 900000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
+LEDSystemTheme theme;         // Custom LED theme, set in setup()
 
 double tempC = -273.15;
 double hiTempC = -273.15;
@@ -59,9 +60,9 @@ void setup()
     // set up the httpclient
     request.hostname = "api.openweathermap.org";
     request.port = 80;
-    char reqPath[100];
-    sprintf(reqPath, "/data/2.5/weather?id=5308049&units=metric&APPID=%s", apiKey);
-    request.path=reqPath;
+    char conditionsRequestPath[100];
+    sprintf(conditionsRequestPath, "/data/2.5/weather?id=5308049&units=metric&APPID=%s", apiKey);
+    request.path = conditionsRequestPath;
 
     // register our functions
     registerFunctions();
@@ -86,8 +87,10 @@ void setup()
     tempStepperPosition = 0;
     hiStepperPosition = 0;
     dewStepperPosition = 0;
-                
-    //TODO: Take contol of the on-board LED
+    
+    // turn off the breathing cyan LED  
+    theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
+    theme.apply(); 
 
 }
 
@@ -314,7 +317,7 @@ int takeSteps(String command)
     if (verbosity >= 1)
     {
         char strLog[25] = "";
-        sprintf(strLog, "Moved motor %d steps", steps);
+        sprintf(strLog, "Moved motor %3.1f steps", steps);
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
@@ -365,61 +368,3 @@ int setVerbosity(String command)
    return 0;
 }
 
-
-void adjustMotors()
-{
-    // to be called every loop
-    // if any motor is a step or more away from its correct position, take one step in the right direction
-    // if a motor is already at its min or max position, don't take more steps in that direction
-    int moveDirection;
-    if (abs(tempStepperRightPosition - tempStepperPosition) >= 1) // if motors are a step or more away from their correct position
-    {
-        int difference = (tempStepperRightPosition - tempStepperPosition);
-        moveDirection = ((difference > 0) - (difference < 0));
-        
-        char strLog[45] = ""; // in case we need to log anything
-            
-        if ((tempStepperPosition + moveDirection) >= 0 && tempStepperPosition + moveDirection <= kTempDisplaySteps)
-        {
-            tempStepper.step(moveDirection);
-            tempStepperPosition = tempStepperPosition + moveDirection;
-            sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
-            (verbosity > 1) && Serial.printlnf(strLog);
-        }
-    }
-    if (abs(hiStepperRightPosition   - hiStepperPosition)   >= 1) 
-    {
-        moveDirection = (((hiStepperRightPosition - hiStepperPosition) > 0) - ((hiStepperRightPosition - hiStepperPosition) < 0));
-        if ((hiStepperPosition + moveDirection) >= 0 && hiStepperPosition + moveDirection <= kTempDisplaySteps)
-        {
-            hiStepper.step(moveDirection);
-            hiStepperPosition = hiStepperPosition + moveDirection;
-        }
-    }
-    if (abs(dewStepperRightPosition  - dewStepperPosition)  >= 1) 
-    {
-        moveDirection = (((dewStepperRightPosition - dewStepperPosition) > 0) - ((dewStepperRightPosition - dewStepperPosition) < 0));
-        
-        if ((dewStepperPosition + moveDirection) >= 0 && dewStepperPosition + moveDirection <= kDewDisplaySteps)
-        {
-            dewStepper.step(moveDirection);
-            dewStepperPosition = dewStepperPosition + moveDirection;
-        }
-    }
-}
-
-//TODO: finish the single-step-per-loop implementation
-//TODO: add "last updated" variable
-//TODO: add motor trim functions for on-the-fly calibration
-//TODO: replace observed hi temp with forecast hi temp
-//http://api.weatherbit.io/v2.0/forecast/daily?key=5b822cc6043144ed98612881846d5d51&days=1&city_id=5308049&units=M
-//http://api.weatherbit.io/v2.0/current?key=5b822cc6043144ed98612881846d5d51&city_id=5308049&units=M
-//TODO: replace DewPoint calculation with lookup in the JSON as long as we're switching
-//Current weather conditions:  https://api.weather.gov/stations/KSDL/observations
-//    doc["features"]["properties"]["temperature"]["value"] == temp
-//    doc["features"]["properties"]["dewpoint"]["value"] == dewpoint
-//Forecast weather conditions: https://api.weather.gov/gridpoints/PSR/160,62/forecast 
-//    doc["properties"]["period"][0]["temperature"] == forecast hi temperature
-//    If jsonpath is there, $.properties.periods[?(@.name=='This Afternoon')].temperature should get us the hi temp
-//    Otherwise, maybe max(["properties"]["period"][0].temperature, ["properties"]["period"][1].temperature) 
-//       would get us the higher of tonight's overnight low and today's high or tonight's overnight low and tomorrow's high?
