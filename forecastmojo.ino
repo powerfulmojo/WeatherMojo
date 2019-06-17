@@ -4,7 +4,7 @@
 #include "HttpClient.h"
 #include <Stepper.h>
 // Include your own weatherbit API key here
-// static const char[32] apiKey = "0123456789abcdef0123456789abcdef";
+// static const char[33] apiKey = "0123456789abcdef0123456789abcdef";
 #include "WeatherbitKey.h"
 
 // configure the boundaries of our gauges appropriate to Phoenix, AZ, US
