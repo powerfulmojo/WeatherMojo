@@ -14,6 +14,7 @@ const int   kTempDisplaySteps  = 458;
 const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
 const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
 const int   kDewDisplaySteps   = 386;
+const int   kCityId            = 5308049; // city ID to get weather for (https://www.weatherbit.io/api/meta)
 
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
@@ -155,7 +156,7 @@ int resetTempAndDewPoint()
     int returnVal = 0;
 
     char conditionsRequestPath[100];
-    sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=5308049&units=M", apiKey);
+    sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=%d&units=M", apiKey, kCityId);
 
     int conditionsRefreshed = refreshJson(conditionsRequestPath);
     if (conditionsRefreshed == 0) 
@@ -200,7 +201,7 @@ int resetHiTemp()
     
     Serial.printlnf("resetting hi temp");
     char forecastRequestPath[100];
-    sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=5308049&units=M", apiKey);
+    sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=%d&units=M", apiKey, kCityId);
     
     int forecastRefreshed = refreshJson(forecastRequestPath);
     
