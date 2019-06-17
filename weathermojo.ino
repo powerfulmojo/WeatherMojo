@@ -15,6 +15,7 @@ const int   kTempDisplaySteps  = 455;
 const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
 const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
 const int   kDewDisplaySteps   = 386;
+const int   kCityId            = 5308049; // city ID to get weather for (https://www.weatherbit.io/api/meta)
 
 int verbosity = 1;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
@@ -61,7 +62,7 @@ void setup()
     request.hostname = "api.openweathermap.org";
     request.port = 80;
     char conditionsRequestPath[100];
-    sprintf(conditionsRequestPath, "/data/2.5/weather?id=5308049&units=metric&APPID=%s", apiKey);
+    sprintf(conditionsRequestPath, "/data/2.5/weather?id=%d&units=metric&APPID=%s", kCityId, apiKey);
     request.path = conditionsRequestPath;
 
     // register our functions
