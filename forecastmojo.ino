@@ -3,22 +3,23 @@
 #include <ArduinoJson.h>
 #include "HttpClient.h"
 #include <Stepper.h>
-// Include your own weatherbit API key here
-// static const char[33] apiKey = "0123456789abcdef0123456789abcdef";
 #include "WeatherbitKey.h"
+// Include your own weatherbit API key in WeatherbitKey.h or uncomment & enter it on the next line
+// char[33] apiKey = "0123456789abcdef0123456789abcdef";
 
 // configure the boundaries of our gauges appropriate to Phoenix, AZ, US
 const float kMinDisplayTempC   = -6.67; // record low temp  -8.89 C ( 16 F) as of May 30, 2019
 const float kMaxDisplayTempC   = 48.89; // record high temp 50.00 C (122 F)
-const int   kTempDisplaySteps  = 458;   
+const int   kTempDisplaySteps  = 462;   
 const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
 const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
 const int   kDewDisplaySteps   = 386;
-const int   kCityId            = 5308049; // city ID to get weather for (https://www.weatherbit.io/api/meta)
+
+int   cityId            = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
 
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
-int makeActualCalls = 1;      // 1 means make real web calls by default, anything else uses a hard-coded JSON doc
+int makeActualCalls = 1;      // 1 means make real web calls. Any other value stops making web calls.
 unsigned int pollingInterval = 900000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 
@@ -42,11 +43,11 @@ http_response_t response;
 DynamicJsonDocument weatherDoc(1600);
 
 // Set up the gauge motors
-Stepper tempStepper(720, D1, D0, D2, D3); // X40 inner ring
+Stepper tempStepper(720, D1, D0, D2, D3); // X40 outer ring
 int tempStepperPosition = 0;
 int tempStepperRightPosition = 0;
 
-Stepper hiStepper(720, D4, D5, D6, D7); // X40 outer ring
+Stepper hiStepper(720, D4, D5, D6, D7); // X40 inner spindle
 int hiStepperPosition = 0;
 int hiStepperRightPosition = 0;
 
@@ -67,30 +68,33 @@ void setup()
     hiStepper.setSpeed(5);
     dewStepper.setSpeed(5);
     
+    // take negative steps enough to be against the counterclockwise stop
     int i;
     for (i = 0; i < 630; i++) 
     {
-        tempStepper.step(-1); // enough to be against the counterclockwise stop
+        tempStepper.step(-1); 
         hiStepper.step(-1);
         dewStepper.step(-1);
     }
     
+    // how far away each motor's counter-clockwise
+    // stop is from minimum value on the gauge face
     int tempStepperZero = 20;
     int hiStepperZero = 80;
     int dewStepperZero = 84;
     
-    for (i = 0; i < max(tempStepperZero, max(hiStepperZero, dewStepperZero)); i++)
+    for (i = 0; i <= max(tempStepperZero, max(hiStepperZero, dewStepperZero)); i++)
     {
         if (i < tempStepperZero) tempStepper.step(1); // enough to reach (0) on each scale
         if (i < hiStepperZero) hiStepper.step(1);
         if (i < dewStepperZero) dewStepper.step(1);
     }
 
-    tempStepperPosition = 0; // call it zero
-    hiStepperPosition = 0;
-    dewStepperPosition = 0;
+    tempStepperPosition = 0; // that makes it official
+    hiStepperPosition = 0;   // each motor is pointed
+    dewStepperPosition = 0;  // at zero
     
-    // turn off the breathing cyan LED. D7 will still tell us we have power  
+    // turn off the breathing cyan LED
     theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
     theme.apply(); 
     
@@ -116,6 +120,7 @@ void loop()
             int successfulReset = resetHiTemp();
             if (successfulReset != 0)
             {
+                // set it to the min temp on the gauge so we know something is wrong.
                 hiTempC = kMinDisplayTempC;
                 // but try again next time
                 lastHiTempReset = 0;
@@ -156,7 +161,7 @@ int resetTempAndDewPoint()
     int returnVal = 0;
 
     char conditionsRequestPath[100];
-    sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=%d&units=M", apiKey, kCityId);
+    sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=%d&units=M", apiKey, cityId);
 
     int conditionsRefreshed = refreshJson(conditionsRequestPath);
     if (conditionsRefreshed == 0) 
@@ -201,7 +206,7 @@ int resetHiTemp()
     
     Serial.printlnf("resetting hi temp");
     char forecastRequestPath[100];
-    sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=%d&units=M", apiKey, kCityId);
+    sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=%d&units=M", apiKey, cityId);
     
     int forecastRefreshed = refreshJson(forecastRequestPath);
     
@@ -303,7 +308,7 @@ int findPosition(double degC, float scaleMin, float scaleMax, int scaleSteps)
     int returnPos = 0;
     float newPosition = ((degC - scaleMin) / (scaleMax - scaleMin)) * scaleSteps;
     
-    newPosition = newPosition + 0.5 - (newPosition<0);
+    newPosition = newPosition + 0.5 - (newPosition < 0);
     returnPos = (int)newPosition;
     if (returnPos < 0) returnPos = 0;
     if (returnPos > scaleSteps) returnPos = scaleSteps;
@@ -321,15 +326,16 @@ void adjustMotors()
     {
         int difference = (tempStepperRightPosition - tempStepperPosition);
         moveDirection = ((difference > 0) - (difference < 0));
-        
-        char strLog[45] = ""; // in case we need to log anything
-            
         if ((tempStepperPosition + moveDirection) >= 0 && tempStepperPosition + moveDirection <= kTempDisplaySteps)
         {
             tempStepper.step(moveDirection);
             tempStepperPosition = tempStepperPosition + moveDirection;
-            sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
-            (verbosity > 1) && Serial.printlnf(strLog);
+            if (verbosity > 1)
+            {
+                char strLog[45] = ""; // in case we need to log anything
+                sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
+                Serial.printlnf(strLog);
+            }
         }
     }
     if (abs(hiStepperRightPosition   - hiStepperPosition)   >= 1) 
@@ -372,7 +378,11 @@ void registerFunctions()
     success = Particle.function("trim_dew", trimDewMotor);
     success ? Serial.println("Registered trim_dew") : Serial.println("Failed to register trim_dew");
     success = Particle.function("set_hi_needle", setHiMotor);
-    success ? Serial.println("Registered set_hi_needle") : Serial.println("Failed to register trim_dew");
+    success ? Serial.println("Registered set_hi_needle") : Serial.println("Failed to register set_hi_needle");
+    success = Particle.function("set_city_code", setCityCode);
+    success ? Serial.println("Registered set_city_code") : Serial.println("Failed to register set_city_code");
+    success = Particle.function("set_api_key", setApiKey);
+    success ? Serial.println("Registered set_api_key") : Serial.println("Failed to register set_api_key");
 }
 
 int setPollingInterval(String command)
@@ -438,9 +448,23 @@ int trimDewMotor(String command)
     return 0;
 }
 
-int setHiMotor(String command)
+int setTempMotor(String command)
 {
     // set the high motor to a temp (Celsius)
+    int newTemp = command.toInt();
+    tempStepperRightPosition = tempToPosition(newTemp);
+    if (verbosity >= 1)
+    {
+        char strLog[25] = "";
+        sprintf(strLog, "Set temp %d (%d)", newTemp, tempStepperRightPosition);
+        Particle.publish("Command", strLog, PRIVATE);
+    }
+    return 0;
+}
+
+int setHiMotor(String command)
+{
+    // set the temp motor to a temp (Celsius)
     int newTemp = command.toInt();
     hiStepperRightPosition = tempToPosition(newTemp);
     if (verbosity >= 1)
@@ -450,6 +474,47 @@ int setHiMotor(String command)
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
-    
 }
 
+int setDewMotor(String command)
+{
+    // set the dew point motor to a temp (Celsius)
+    int newTemp = command.toInt();
+    dewStepperRightPosition = dewToPosition(newTemp);
+    if (verbosity >= 1)
+    {
+        char strLog[25] = "";
+        sprintf(strLog, "Set dew point %d (%d)", newTemp, dewStepperRightPosition);
+        Particle.publish("Command", strLog, PRIVATE);
+    }
+    return 0;
+}
+
+int setCityCode(String command)
+{
+    // set the city code we'll get weather for
+    int newCode = command.toInt();
+    cityId = newCode;
+    // and update conditions right away.
+    lastPoll = lastPoll - pollingInterval;
+    if (verbosity >= 1)
+    {
+        char strLog[25] = "";
+        sprintf(strLog, "Set city code to %d", cityId);
+        Particle.publish("Command", strLog, PRIVATE);
+    }
+    return 0;
+}
+
+int setApiKey(String command)
+{
+    // careful... easy to break everything
+    command.toCharArray(apiKey,33);
+    if (verbosity >= 1)
+    {
+        char strLog[25] = "";
+        sprintf(strLog, "Set API key to %s", apiKey);
+        Particle.publish("Command", strLog, PRIVATE);
+    }
+    return 0;
+}
