@@ -32,8 +32,12 @@ Moves the temperature needle _Command_ steps, but does not update the **TempC** 
 Moves the high temperature needle _Command_ steps, but does not update the **HiTempC** variable. Negative numbers go counterclockwise, positive go clockwise. Returns **0** on success.<br />
 * int **trim_dew**(String _Command_) <br />
 Moves the dew point needle _Command_ steps, but does not update the **DewPointC** variable. Negative numbers go counterclockwise, positive go clockwise. Returns **0** on success.<br />
+* int **set_temp_needle**(String _Command_) <br />
+Sets the current temperature to _Command_ degrees C. The needle position will be updated accordingly. Returns 0 on success. If the dial isn’t calibrated correctly don’t use this to fix it. It will just get over-written with the next weather update. You probably want to use **trim_temp** to change the station’s idea of where to point when showing the current temperature.<br />
 * int **set_hi_needle**(String _Command_) <br />
-Sets the **HiTempC** variable to _Command_ degrees C. Needle position will be updated accordingly. Returns **0** on success.<br />
+Sets the forecast high temperature to _Command_ degrees C. The needle position will be updated accordingly. Returns 0 on success. If the dial isn’t calibrated correctly don’t use this to fix it. It will just get over-written tomorrow. You probably want to use **trim_hitemp** to change the station’s idea of where to point when showing the hi temperature.<br />
+* int **set_dew_needle**(String _Command_) <br />
+Sets the dew point temperature to _Command_ degrees C. The needle position will be updated accordingly. Returns 0 on success. If the dial isn’t calibrated correctly don’t use this to fix it. It will just get over-written with the next weather update. You probably want to use **trim_dew** to change the station’s idea of where to point when showing the dew point.<br />
 * int **set_city_code**(String _Command_) <br />
 Sets the city code to use for weather conditions. A full list is at https://www.weatherbit.io/api/meta. Returns 0 on success. Setting it to an invalid value will cause the WeatherMojo to stop updating temperatures.<br />
 * int **set_api_key**(String _Command_) <br />
