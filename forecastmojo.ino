@@ -15,7 +15,8 @@ const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
 const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
 const int   kDewDisplaySteps   = 386;
 
-int   cityId            = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
+int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
+int   tZone  = -7;      // Time zone
 
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
@@ -58,7 +59,7 @@ int dewStepperRightPosition = 0;
 void setup()
 {
     Serial.begin(9600);
-    Time.zone(-7);
+    Time.zone(tZone);
    
     request.hostname = "api.weatherbit.io";
     request.port = 80;
@@ -144,6 +145,13 @@ void loop()
         // set all motors' correct positions
         tempStepperRightPosition = tempToPosition(tempC);
         hiStepperRightPosition = tempToPosition(hiTempC);
+        if (verbosity > 1)
+        {
+            char strDebugLog[50] = "";
+            sprintf(strDebugLog, "Set hi stepper position to %d", hiStepperRightPosition);
+            Particle.publish("Debug", strDebugLog, PRIVATE);
+        }
+        
         dewStepperRightPosition = dewToPosition(dewPointC);
 
     } // end if polling interval
@@ -369,8 +377,8 @@ void registerFunctions()
     Particle.variable("MakeActualCalls", makeActualCalls);
     
     bool success = false;
-    success = Particle.function("polling_mojo", setPollingInterval);
-    success ? Serial.println("Registered polling_mojo") : Serial.println("Failed to register polling_mojo");
+    success = Particle.function("set_polling_interval", setPollingInterval);
+    success ? Serial.println("Registered set_polling_interval") : Serial.println("Failed to register polling_mojo");
     success = Particle.function("trim_temp", trimTempMotor);
     success ? Serial.println("Registered trim_temp") : Serial.println("Failed to register trim_temp");
     success = Particle.function("trim_hitemp", trimHiTempMotor);
@@ -450,7 +458,7 @@ int trimDewMotor(String command)
 
 int setTempMotor(String command)
 {
-    // set the high motor to a temp (Celsius)
+    // set the temp motor to a temp (Celsius)
     int newTemp = command.toInt();
     tempStepperRightPosition = tempToPosition(newTemp);
     if (verbosity >= 1)
@@ -464,7 +472,7 @@ int setTempMotor(String command)
 
 int setHiMotor(String command)
 {
-    // set the temp motor to a temp (Celsius)
+    // set the hi temp motor to a temp (Celsius)
     int newTemp = command.toInt();
     hiStepperRightPosition = tempToPosition(newTemp);
     if (verbosity >= 1)
