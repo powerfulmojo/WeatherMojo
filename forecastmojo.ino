@@ -385,8 +385,12 @@ void registerFunctions()
     success ? Serial.println("Registered trim_hitemp") : Serial.println("Failed to register trim_hitemp");
     success = Particle.function("trim_dew", trimDewMotor);
     success ? Serial.println("Registered trim_dew") : Serial.println("Failed to register trim_dew");
+    success = Particle.function("set_temp_needle", setTempMotor);
+    success ? Serial.println("Registered set_temp_needle") : Serial.println("Failed to register set_temp_needle");
     success = Particle.function("set_hi_needle", setHiMotor);
     success ? Serial.println("Registered set_hi_needle") : Serial.println("Failed to register set_hi_needle");
+    success = Particle.function("set_dew_needle", setDewMotor);
+    success ? Serial.println("Registered set_dew_needle") : Serial.println("Failed to register set_dew_needle");
     success = Particle.function("set_city_code", setCityCode);
     success ? Serial.println("Registered set_city_code") : Serial.println("Failed to register set_city_code");
     success = Particle.function("set_api_key", setApiKey);
