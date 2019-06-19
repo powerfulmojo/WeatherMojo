@@ -21,7 +21,8 @@ Retrieves weather conditions and forecast from [weatherbit.io](http://weatherbit
 ### Particle Variables
 * **TempC** The current temperature in Celsius
 * **DewPointC** The current dew point in Celsius
-* **HiTempC** The last updated high temperature in Celsius (usually retrieved at 4am)
+* **HiTempC** The last updated high temperature in Celsius
+* **LastUpdate** The time of the last temperature and high temperature update
 
 ### Particle Functions
 * int **set_polling_interval**(String _Command_) <br /> 
