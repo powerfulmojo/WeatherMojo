@@ -23,6 +23,7 @@ int verbosity = 2;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls. Any other value stops making web calls.
 unsigned int pollingInterval = 900000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
+String lastUpdateTimeString = "";
 
 double tempC = -273.15;
 double hiTempC = -273.15;
@@ -136,6 +137,7 @@ void loop()
             sprintf(strLog, "T: %3.2f (hi %3.2f) C\nDP: %3.2f C", tempC, hiTempC, dewPointC);
             Serial.printlnf(strLog);
             (verbosity > 0) && Particle.publish("Updated", strLog, PRIVATE);
+            lastUpdateTimeString = Time.format(Time.now(),TIME_FORMAT_ISO8601_FULL);
         }
         else
         {
@@ -340,7 +342,7 @@ void adjustMotors()
             tempStepperPosition = tempStepperPosition + moveDirection;
             if (verbosity > 1)
             {
-                char strLog[45] = ""; // in case we need to log anything
+                char strLog[45] = "";
                 sprintf(strLog, "M=%d, P=%d, RP=%d", moveDirection, tempStepperPosition, tempStepperRightPosition);
                 Serial.printlnf(strLog);
             }
@@ -358,7 +360,6 @@ void adjustMotors()
     if (abs(dewStepperRightPosition  - dewStepperPosition)  >= 1) 
     {
         moveDirection = (((dewStepperRightPosition - dewStepperPosition) > 0) - ((dewStepperRightPosition - dewStepperPosition) < 0));
-        
         if ((dewStepperPosition + moveDirection) >= 0 && dewStepperPosition + moveDirection <= kDewDisplaySteps)
         {
             dewStepper.step(moveDirection);
@@ -375,6 +376,7 @@ void registerFunctions()
     Particle.variable("DewPointC", dewPointC);
     Particle.variable("HiTempC", hiTempC);
     Particle.variable("MakeActualCalls", makeActualCalls);
+    Particle.variable("LastUpdate", lastUpdateTimeString);
     
     bool success = false;
     success = Particle.function("set_polling_interval", setPollingInterval);
