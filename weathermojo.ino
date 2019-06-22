@@ -45,7 +45,7 @@ Stepper tempStepper(720, D1, D0, D2, D3); // X40 inner ring
 int tempStepperPosition = 0;
 int tempStepperRightPosition = 0;
 
-Stepper hiStepper(720, D4, D5, D6, D7); // X40 outer ring
+Stepper hiStepper(720, D4, D5, D6, A5); // X40 outer ring
 int hiStepperPosition = 0;
 int hiStepperRightPosition = 0;
 
