@@ -49,7 +49,7 @@ Stepper tempStepper(720, D1, D0, D2, D3); // X40 outer ring
 int tempStepperPosition = 0;
 int tempStepperRightPosition = 0;
 
-Stepper hiStepper(720, D4, D5, D6, D7); // X40 inner spindle
+Stepper hiStepper(720, D4, D5, D6, A5); // X40 inner spindle
 int hiStepperPosition = 0;
 int hiStepperRightPosition = 0;
 
@@ -81,9 +81,9 @@ void setup()
     
     // how far away each motor's counter-clockwise
     // stop is from minimum value on the gauge face
-    int tempStepperZero = 20;
-    int hiStepperZero = 80;
-    int dewStepperZero = 84;
+    int tempStepperZero = 18;
+    int hiStepperZero = 16;
+    int dewStepperZero = 86;
     
     for (i = 0; i <= max(tempStepperZero, max(hiStepperZero, dewStepperZero)); i++)
     {
