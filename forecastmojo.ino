@@ -8,11 +8,11 @@
 // char[33] apiKey = "0123456789abcdef0123456789abcdef";
 
 // configure the boundaries of our gauges appropriate to Phoenix, AZ, US
-const float kMinDisplayTempC   = -6.67; // record low temp  -8.89 C ( 16 F) as of May 30, 2019
-const float kMaxDisplayTempC   = 48.89; // record high temp 50.00 C (122 F)
+const float kMinDisplayTempF   =  20; // record low temp  -8.89 C ( 16 F) as of May 30, 2019
+const float kMaxDisplayTempF   = 120; // record high temp 50.00 C (122 F)
 const int   kTempDisplaySteps  = 462;   
-const float kMinDisplayDewC    = -26.11;// record low dew point -30.55 C (-23 F)
-const float kMaxDisplayDewC    = 23.89; // record high dew point 26.11 C ( 79 F)
+const float kMinDisplayDewF    = -15; // record low dew point -30.55 C (-23 F)
+const float kMaxDisplayDewF    =  75; // record high dew point 26.11 C ( 79 F)
 const int   kDewDisplaySteps   = 386;
 
 int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
@@ -25,9 +25,9 @@ unsigned int pollingInterval = 900000; //milliseconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 String lastUpdateTimeString = "";
 
-double tempC = -273.15;
-double hiTempC = -273.15;
-double dewPointC = -273.15;
+double tempF = -459.67;
+double hiTempF = -459.67;
+double dewPointF = -459.67;
 
 // variables to handle the once-a-day hi temp forecast reset
 int lastHiTempReset = 0;      // weekday, 1=Sunday, 7=Saturday
@@ -36,7 +36,7 @@ int hiTempResetHour = 4;      // reset on this hour every day (0-23)
 //global httpclient stuff
 HttpClient http;
 http_header_t headers[] = {
-    { "Accept" , "* / *"},
+    { "Accept" , "application/json"},
     { "User-agent", "powerfulmojo.com HttpClient"},
     { NULL, NULL }
 };
@@ -83,7 +83,7 @@ void setup()
     // stop is from minimum value on the gauge face
     int tempStepperZero = 18;
     int hiStepperZero = 16;
-    int dewStepperZero = 86;
+    int dewStepperZero = 92;
     
     for (i = 0; i <= max(tempStepperZero, max(hiStepperZero, dewStepperZero)); i++)
     {
@@ -108,7 +108,9 @@ void setup()
 void loop()
 {
     unsigned long now = millis();
-    
+    bool wifiReady = WiFi.ready();
+	bool cloudReady = Particle.connected();
+
     if ((now - lastPoll) >= (pollingInterval)) 
     {
 		lastPoll = now;
@@ -123,7 +125,7 @@ void loop()
             if (successfulReset != 0)
             {
                 // set it to the min temp on the gauge so we know something is wrong.
-                hiTempC = kMinDisplayTempC;
+                hiTempF = kMinDisplayTempF;
                 // but try again next time
                 lastHiTempReset = 0;
             }
@@ -134,7 +136,7 @@ void loop()
         if (successfulConditionsSet == 0)
         {
             char strLog[50] = "";
-            sprintf(strLog, "T: %3.2f (hi %3.2f) C\nDP: %3.2f C", tempC, hiTempC, dewPointC);
+            sprintf(strLog, "T: %3.2f (hi %3.2f) F\nDP: %3.2f F", tempF, hiTempF, dewPointF);
             Serial.printlnf(strLog);
             (verbosity > 0) && Particle.publish("Updated", strLog, PRIVATE);
             lastUpdateTimeString = Time.format(Time.now(),TIME_FORMAT_ISO8601_FULL);
@@ -145,8 +147,8 @@ void loop()
         }
         
         // set all motors' correct positions
-        tempStepperRightPosition = tempToPosition(tempC);
-        hiStepperRightPosition = tempToPosition(hiTempC);
+        tempStepperRightPosition = tempToPosition(tempF);
+        hiStepperRightPosition = tempToPosition(hiTempF);
         if (verbosity > 1)
         {
             char strDebugLog[50] = "";
@@ -154,7 +156,7 @@ void loop()
             Particle.publish("Debug", strDebugLog, PRIVATE);
         }
         
-        dewStepperRightPosition = dewToPosition(dewPointC);
+        dewStepperRightPosition = dewToPosition(dewPointF);
 
     } // end if polling interval
     
@@ -171,33 +173,33 @@ int resetTempAndDewPoint()
     int returnVal = 0;
 
     char conditionsRequestPath[100];
-    sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=%d&units=M", apiKey, cityId);
+    sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=%d&units=I", apiKey, cityId);
 
     int conditionsRefreshed = refreshJson(conditionsRequestPath);
     if (conditionsRefreshed == 0) 
     {
-        double tC = weatherDoc["data"][0]["temp"];
-        double dC = weatherDoc["data"][0]["dewpt"];
-        Serial.printlnf("conditions retrieved: Temp %f C, DP %f C", tC, dC);
+        double tF = weatherDoc["data"][0]["temp"];
+        double dF = weatherDoc["data"][0]["dewpt"];
+        Serial.printlnf("conditions retrieved: Temp %f F, DP %f F", tF, dF);
         
-        if (tC > -20 && tC < 60) 
+        if (tF > 10 && tF < 130) 
         {
-            tempC = tC;
+            tempF = tF;
         }
         else
         {
             returnVal = -1;
-            Serial.printlnf("Temp not updated because %f is out of bounds", tC);
+            Serial.printlnf("Temp not updated because %f is out of bounds", tF);
         }
         
-        if (dC > -65 && dC < 50) 
+        if (dF > -30 && dF < 90) 
         {
-            dewPointC = dC;
+            dewPointF = dF;
         }
         else
         {
             returnVal = -1;
-            Serial.printlnf("Dew point not updated because %f is out of bounds", dC);
+            Serial.printlnf("Dew point not updated because %f is out of bounds", dF);
         }
     }
     else
@@ -216,7 +218,7 @@ int resetHiTemp()
     
     Serial.printlnf("resetting hi temp");
     char forecastRequestPath[100];
-    sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=%d&units=M", apiKey, cityId);
+    sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=%d&units=I", apiKey, cityId);
     
     int forecastRefreshed = refreshJson(forecastRequestPath);
     
@@ -224,12 +226,12 @@ int resetHiTemp()
     {
         Serial.println("forecast refresh successful.");
     
-        double htC = kMinDisplayTempC; // if this all fails, display min temp on the scale
-        htC = weatherDoc["data"][0]["max_temp"];
-        Serial.printlnf("hi temp is now %f", htC);
-        if (htC > -10 && htC < 55) 
+        double htF = kMinDisplayTempF; // if this all fails, display min temp on the scale
+        htF = weatherDoc["data"][0]["max_temp"];
+        Serial.printlnf("hi temp is now %f", htF);
+        if (htF > 10 && htF < 130) 
         {
-            hiTempC = htC;
+            hiTempF = htF;
         }
         else 
         {
@@ -290,33 +292,33 @@ int refreshJson(String requestPath)
     return returnVal;
 }
 
-int tempToPosition(double tempDegC)
+int tempToPosition(double tempDegF)
 {
     // return the position in positive steps from zero for the given temperature
-    int returnPos = findPosition(tempDegC, kMinDisplayTempC, kMaxDisplayTempC, kTempDisplaySteps);
+    int returnPos = findPosition(tempDegF, kMinDisplayTempF, kMaxDisplayTempF, kTempDisplaySteps);
 
     char strLog[45] = "";
-    sprintf(strLog, "Temp: %3.2f C is step position %d", tempDegC, returnPos);
+    sprintf(strLog, "Temp: %3.2f F is step position %d", tempDegF, returnPos);
     Serial.printlnf(strLog);
     return returnPos;
 }
 
-int dewToPosition(double dewPointC)
+int dewToPosition(double dewPointF)
 {
     // return the position in positive steps from zero for the given temperature
-    int returnPos = findPosition(dewPointC, kMinDisplayDewC, kMaxDisplayDewC, kDewDisplaySteps);
+    int returnPos = findPosition(dewPointF, kMinDisplayDewF, kMaxDisplayDewF, kDewDisplaySteps);
 
     char strLog[45] = "";
-    sprintf(strLog, "Dew point: %3.2f C is step position %d", dewPointC, returnPos);
+    sprintf(strLog, "Dew point: %3.2f F is step position %d", dewPointF, returnPos);
     Serial.printlnf(strLog);
     return returnPos;
 }
 
-int findPosition(double degC, float scaleMin, float scaleMax, int scaleSteps)
+int findPosition(double deg, float scaleMin, float scaleMax, int scaleSteps)
 {
     // given a point in a range, return the position in steps from zero
     int returnPos = 0;
-    float newPosition = ((degC - scaleMin) / (scaleMax - scaleMin)) * scaleSteps;
+    float newPosition = ((deg - scaleMin) / (scaleMax - scaleMin)) * scaleSteps;
     
     newPosition = newPosition + 0.5 - (newPosition < 0);
     returnPos = (int)newPosition;
@@ -372,9 +374,9 @@ void adjustMotors()
 
 void registerFunctions()
 {
-    Particle.variable("TempC", tempC);
-    Particle.variable("DewPointC", dewPointC);
-    Particle.variable("HiTempC", hiTempC);
+    Particle.variable("Temp", tempF);
+    Particle.variable("DewPoint", dewPointF);
+    Particle.variable("HiTemp", hiTempF);
     Particle.variable("MakeActualCalls", makeActualCalls);
     Particle.variable("LastUpdate", lastUpdateTimeString);
     
@@ -464,7 +466,7 @@ int trimDewMotor(String command)
 
 int setTempMotor(String command)
 {
-    // set the temp motor to a temp (Celsius)
+    // set the temp motor to a temp
     int newTemp = command.toInt();
     tempStepperRightPosition = tempToPosition(newTemp);
     if (verbosity >= 1)
@@ -478,7 +480,7 @@ int setTempMotor(String command)
 
 int setHiMotor(String command)
 {
-    // set the hi temp motor to a temp (Celsius)
+    // set the hi temp motor to a temp
     int newTemp = command.toInt();
     hiStepperRightPosition = tempToPosition(newTemp);
     if (verbosity >= 1)
@@ -492,7 +494,7 @@ int setHiMotor(String command)
 
 int setDewMotor(String command)
 {
-    // set the dew point motor to a temp (Celsius)
+    // set the dew point motor to a temp
     int newTemp = command.toInt();
     dewStepperRightPosition = dewToPosition(newTemp);
     if (verbosity >= 1)
