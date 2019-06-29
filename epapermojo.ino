@@ -149,7 +149,8 @@ void displayTemp(double temp, int type)
 {
     // where to draw each thing
     //int xs[] = {100, 35, 350}; // left edges
-    int ys[] = {138, 563, 563};// top edges
+    int ls[] = {0, 0, 304};    // left edges
+    int ts[] = {138, 563, 563};// top edges
     int rs[] = {500, 290, 600};// right edges
     char prefix = (type == UPDATE_TEMP) ? 'B' : 'S';
     
@@ -161,11 +162,11 @@ void displayTemp(double temp, int type)
     int ones = (int)(abs(t) % 10);
 
     int x = computeLeftEdge((type == UPDATE_DEW_POINT && t < 0), huns, tens, ones, type);
-    int y = ys[type];
+    int y = ts[type];
 
     // blank out the old values
     epd_set_color(WHITE, BLACK); // white rectangles to erase old data
-    epd_fill_rect(x - 1, ys[type], rs[type], (ys[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
+    epd_fill_rect(ls[type], ts[type], rs[type], (ts[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
     epd_set_color(BLACK, WHITE); // back to black on white
 
 
@@ -179,15 +180,21 @@ void displayTemp(double temp, int type)
         x = x + 30;
     }
     
-    sprintf(filename, "%c1.BMP", prefix);
-    Serial.println(filename);
-    if (huns > 0) epd_disp_bitmap(filename, x, y);
-    x = x + ((type == UPDATE_TEMP) ? bigWidths[1] : lilWidths[1]);
+    if (huns > 0) 
+    {
+        sprintf(filename, "%c1.BMP", prefix);
+        Serial.println(filename);
+        epd_disp_bitmap(filename, x, y);
+        x = x + ((type == UPDATE_TEMP) ? bigWidths[1] : lilWidths[1]);
+    }
     
-    sprintf(filename, "%c%d.BMP", prefix, tens);
-    Serial.println(filename);
-    if (tens > 0 || huns > 0) epd_disp_bitmap(filename, x, y);
-    x = x + ((type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens]);
+    if (tens > 0 || huns > 0) 
+    {
+        sprintf(filename, "%c%d.BMP", prefix, tens);
+        Serial.println(filename);
+        epd_disp_bitmap(filename, x, y);
+        x = x + ((type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens]);
+    }
     
     sprintf(filename, "%c%d.BMP", prefix, ones);
     Serial.println(filename);
@@ -199,14 +206,16 @@ int computeLeftEdge(bool isNegative, int hundreds, int tens, int ones, int type)
     int leftEdge = 0;
     int width = 0;
     
-    if (isNegative) width += 30;
-    if (hundreds > 0) width += (type == UPDATE_TEMP) ? bigWidths[hundreds] : lilWidths[hundreds];
-    if (tens > 0 || hundreds > 0) width += (type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens];
+    if (isNegative) { width += 30; Serial.printlnf("Negative, adding 30. Width: %d", width); }
+    if (hundreds > 0) { width += (type == UPDATE_TEMP) ? bigWidths[hundreds] : lilWidths[hundreds]; Serial.printlnf("Hundreds width: %d", width); }
+    if (tens > 0 || hundreds > 0) { width += (type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens]; Serial.printlnf("Tens width: %d", width); }
     width += (type == UPDATE_TEMP) ? bigWidths[ones] : lilWidths[ones];
+    Serial.printlnf("Final width: %d", width );
     
     if (type == UPDATE_TEMP) leftEdge = (int) 300 - (width / 2);
-    if (type == UPDATE_DEW_POINT) leftEdge = (int) 100 - (width / 2);
+    if (type == UPDATE_DEW_POINT) leftEdge = (int) 150 - (width / 2);
     if (type == UPDATE_HI_TEMP) leftEdge = (int) 450 - (width /2);
+    Serial.printlnf("So left edge is %d", leftEdge);
     
     return leftEdge;    
 }
@@ -378,6 +387,8 @@ int setTemp(String command)
 {
     int newTemp = command.toInt();
     tempF = newTemp;
+    epd_wakeup();
+    delay(10);
     displayTemp(tempF, UPDATE_TEMP);
     epd_update();
     return 0;
@@ -387,6 +398,8 @@ int setHiTemp(String command)
 {
     int newTemp = command.toInt();
     hiTempF = newTemp;
+    epd_wakeup();
+    delay(10);
     displayTemp(hiTempF, UPDATE_HI_TEMP);
     epd_update();
     return 0;
@@ -396,6 +409,8 @@ int setDewPoint(String command)
 {
     int newTemp = command.toInt();
     dewPointF = newTemp;
+    epd_wakeup();
+    delay(10);
     displayTemp(dewPointF, UPDATE_DEW_POINT);
     epd_update();
     return 0;
