@@ -2,13 +2,10 @@
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <ArduinoJson.h>
 #include "HttpClient.h"
-#include "WeatherbitKey.h"
-#include "epd.h" // Defines pin D2 as wake_up
+#include "epd.h" // from https://www.waveshare.com/wiki/4.3inch_e-Paper_UART_Module#Resources
 // Include your own weatherbit API key in WeatherbitKey.h or uncomment & enter it on the next line
 // char[33] apiKey = "0123456789abcdef0123456789abcdef";
-//#include "bigfont.h" // drawing font bitmaps longhand is a pain
-
-
+#include "WeatherbitKey.h"
 
 int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
 int   tZone  = -7;      // Time zone
@@ -26,10 +23,9 @@ double hiTempF = -459.67;
 double dewPointF = -459.67;
 
 // wake-up pin
-//epaper device wake-up pin set in epd.cpp int wake_up = D2;
-int wake_up = D2; // e-paper wakeup
-int wake_particle_button = D4;
-int service_mode = D6;
+int wake_up = D2; 
+int wake_particle_button = D4; // momentary switch connects 3.3V to D4 (INPUT_PULLUP)
+int service_mode = D6;         // momentary switch connects GND to D6 (INPUT_PULLUP)
 
 //global httpclient stuff
 HttpClient http;
@@ -82,18 +78,6 @@ void loop()
     Particle.process();
     unsigned long now = millis();
     bool wifiReady = WiFi.ready();
-
-    if (inServiceMode == 1)
-    {
-        // turn ON the breathing cyan LED
-        theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
-        theme.apply();
-    }
-    else // turn LED off
-    {
-        theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000);
-        theme.apply();
-    }
 
     if (wifiReady) 
     {
