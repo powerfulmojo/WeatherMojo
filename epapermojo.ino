@@ -148,30 +148,36 @@ void loop()
 void displayTemp(double temp, int type)
 {
     // where to draw each thing
-    int xs[] = {100, 35, 350}; // left edges
+    //int xs[] = {100, 35, 350}; // left edges
     int ys[] = {138, 563, 563};// top edges
     int rs[] = {500, 290, 600};// right edges
     char prefix = (type == UPDATE_TEMP) ? 'B' : 'S';
     
-    // blank out the old values
-    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
-    epd_fill_rect(xs[type] - 35, ys[type], rs[type], (ys[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
-    epd_set_color(BLACK, WHITE); // back to black on white
-	
     temp = temp + 0.5 - (temp < 0);
     int t = (int)temp;
-    int x = xs[type];
-    int y = ys[type];
     
     int huns = (int)(abs(t) >= 100);
     int tens = (int)(abs(t - (huns * 100)) / 10);
     int ones = (int)(abs(t) % 10);
 
+    int x = computeLeftEdge((type == UPDATE_DEW_POINT && t < 0), huns, tens, ones, type);
+    int y = ys[type];
+
+    // blank out the old values
+    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
+    epd_fill_rect(x - 1, ys[type], rs[type], (ys[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
+    epd_set_color(BLACK, WHITE); // back to black on white
+
+
     char filename[7] = "";
     
     // is it negative? draw a 20x15 rectangle to the left
     // Only dew point can be negative in my neighborhood :-)
-    if (type == UPDATE_DEW_POINT && t < 0) epd_fill_rect(x + 20, (y + ((type == UPDATE_TEMP) ? 108 : 55)), (x + 40), (y + ((type == UPDATE_TEMP) ? 125 : 72)));
+    if (type == UPDATE_DEW_POINT && t < 0) 
+    {
+        epd_fill_rect(x, (y + 55), (x + 20), (y + 72));
+        x = x + 30;
+    }
     
     sprintf(filename, "%c1.BMP", prefix);
     Serial.println(filename);
@@ -187,6 +193,24 @@ void displayTemp(double temp, int type)
     Serial.println(filename);
     epd_disp_bitmap(filename, x, y);
 }
+
+int computeLeftEdge(bool isNegative, int hundreds, int tens, int ones, int type)
+{
+    int leftEdge = 0;
+    int width = 0;
+    
+    if (isNegative) width += 30;
+    if (hundreds > 0) width += (type == UPDATE_TEMP) ? bigWidths[hundreds] : lilWidths[hundreds];
+    if (tens > 0 || hundreds > 0) width += (type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens];
+    width += (type == UPDATE_TEMP) ? bigWidths[ones] : lilWidths[ones];
+    
+    if (type == UPDATE_TEMP) leftEdge = (int) 300 - (width / 2);
+    if (type == UPDATE_DEW_POINT) leftEdge = (int) 100 - (width / 2);
+    if (type == UPDATE_HI_TEMP) leftEdge = (int) 450 - (width /2);
+    
+    return leftEdge;    
+}
+
 
 
 int resetTempAndDewPoint()
