@@ -40,6 +40,7 @@ DynamicJsonDocument weatherDoc(1600);
 
 const int bigWidths[] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
 const int lilWidths[] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
+enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
 
 void setup()
 {
@@ -107,9 +108,9 @@ void loop()
             Serial.println("at least one of temp and dewpoint was not set properly and I am sad.");
         }
         
-        displayTemp(tempF, 0);
-        displayTemp(dewPointF, 1);
-        displayTemp(hiTempF, 2);
+        displayTemp(tempF, UPDATE_TEMP);
+        displayTemp(dewPointF, UPDATE_DEW_POINT);
+        displayTemp(hiTempF, UPDATE_HI_TEMP);
 
         epd_update();       
         epd_enter_stopmode();
@@ -146,19 +147,15 @@ void loop()
 
 void displayTemp(double temp, int type)
 {
-    // type 0 = main temp
-    // type 1 = dew point (left side)
-    // type 2 = forecast high (right side)
-    
     // where to draw each thing
     int xs[] = {100, 35, 350}; // left edges
     int ys[] = {138, 563, 563};// top edges
     int rs[] = {500, 290, 600};// right edges
-    char prefix = (type == 0) ? 'B' : 'S';
+    char prefix = (type == UPDATE_TEMP) ? 'B' : 'S';
     
     // blank out the old values
     epd_set_color(WHITE, BLACK); // white rectangles to erase old data
-    epd_fill_rect(xs[type] - 35, ys[type], rs[type], (ys[type] + ((type == 0) ? 217 : 110)));
+    epd_fill_rect(xs[type] - 35, ys[type], rs[type], (ys[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
     epd_set_color(BLACK, WHITE); // back to black on white
 	
     temp = temp + 0.5 - (temp < 0);
@@ -174,17 +171,17 @@ void displayTemp(double temp, int type)
     
     // is it negative? draw a 20x15 rectangle to the left
     // Only dew point can be negative in my neighborhood :-)
-    if (type == 1 && t < 0) epd_fill_rect(x + 20, (y + ((type == 0) ? 108 : 55)), (x + 40), (y + ((type == 0) ? 125 : 72)));
+    if (type == UPDATE_DEW_POINT && t < 0) epd_fill_rect(x + 20, (y + ((type == UPDATE_TEMP) ? 108 : 55)), (x + 40), (y + ((type == UPDATE_TEMP) ? 125 : 72)));
     
     sprintf(filename, "%c1.BMP", prefix);
     Serial.println(filename);
     if (huns > 0) epd_disp_bitmap(filename, x, y);
-    x = x + ((type == 0) ? bigWidths[1] : lilWidths[1]);
+    x = x + ((type == UPDATE_TEMP) ? bigWidths[1] : lilWidths[1]);
     
     sprintf(filename, "%c%d.BMP", prefix, tens);
     Serial.println(filename);
     if (tens > 0 || huns > 0) epd_disp_bitmap(filename, x, y);
-    x = x + ((type == 0) ? bigWidths[tens] : lilWidths[tens]);
+    x = x + ((type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens]);
     
     sprintf(filename, "%c%d.BMP", prefix, ones);
     Serial.println(filename);
@@ -357,7 +354,7 @@ int setTemp(String command)
 {
     int newTemp = command.toInt();
     tempF = newTemp;
-    displayTemp(tempF, 0);
+    displayTemp(tempF, UPDATE_TEMP);
     epd_update();
     return 0;
 }
@@ -366,7 +363,7 @@ int setHiTemp(String command)
 {
     int newTemp = command.toInt();
     hiTempF = newTemp;
-    displayTemp(hiTempF, 2);
+    displayTemp(hiTempF, UPDATE_HI_TEMP);
     epd_update();
     return 0;
 }
@@ -375,7 +372,7 @@ int setDewPoint(String command)
 {
     int newTemp = command.toInt();
     dewPointF = newTemp;
-    displayTemp(dewPointF, 1);
+    displayTemp(dewPointF, UPDATE_DEW_POINT);
     epd_update();
     return 0;
 }
