@@ -5,7 +5,10 @@
 #include "WeatherbitKey.h"
 #include "epd.h" // Defines pin D2 as wake_up
 // Include your own weatherbit API key in WeatherbitKey.h or uncomment & enter it on the next line
-// char[33] apiKey = "0123456789abcdef0123456789abcdef"
+// char[33] apiKey = "0123456789abcdef0123456789abcdef";
+//#include "bigfont.h" // drawing font bitmaps longhand is a pain
+
+
 
 int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
 int   tZone  = -7;      // Time zone
@@ -24,6 +27,7 @@ double dewPointF = -459.67;
 
 // wake-up pin
 //epaper device wake-up pin set in epd.cpp int wake_up = D2;
+int wake_up = D2; // e-paper wakeup
 int wake_particle_button = D4;
 int service_mode = D6;
 
@@ -434,3 +438,18 @@ int setApiKey(String command)
     return 0;
 }
 
+void epd_init(void)
+{
+	Serial1.begin(115200);
+	pinMode(wake_up, OUTPUT);
+}
+
+void epd_wakeup(void)
+{
+	digitalWrite(wake_up, LOW);
+	delayMicroseconds(10);
+	digitalWrite(wake_up, HIGH);
+	delayMicroseconds(500);
+	digitalWrite(wake_up, LOW);
+	delay(10);
+}
