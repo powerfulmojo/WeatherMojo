@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include "HttpClient.h"
 #include "epd.h" // from https://www.waveshare.com/wiki/4.3inch_e-Paper_UART_Module#Resources
+#include <PowerShield.h>
 // Include your own weatherbit API key in WeatherbitKey.h or uncomment & enter it on the next line
 // char[33] apiKey = "0123456789abcdef0123456789abcdef";
 #include "WeatherbitKey.h"
@@ -14,7 +15,7 @@ LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 int makeActualCalls = 1;      // 1 means make real web calls. Any other value stops making web calls.
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
-unsigned int pollingInterval = 900; //Seconds
+unsigned int pollingInterval = 60; //Seconds
 unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
 String lastUpdateTimeString = "";
 
@@ -42,6 +43,8 @@ const int bigWidths[] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
 const int lilWidths[] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
 enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
 
+PowerShield batteryMonitor;
+
 void setup()
 {
     Serial.begin(9600);
@@ -51,6 +54,10 @@ void setup()
     pinMode(service_mode, INPUT_PULLUP);
     attachInterrupt(service_mode, enterServiceMode, FALLING);
     
+    // battery meter stuff
+    batteryMonitor.begin();
+    batteryMonitor.quickStart();
+
     request.hostname = "api.weatherbit.io";
     request.port = 80;
 
@@ -115,11 +122,18 @@ void loop()
         epd_update();       
         epd_enter_stopmode();
         
-        // THIS WILL NEVER LOOP, so leave some time to receive commands or press the service mode button
+        // THIS WILL NEVER LOOP unless we're in service mode
+        // so leave some time to receive commands or press the service mode button
         delay(5000);
+        
+        float stateOfCharge = batteryMonitor.getSoC();
+        char strLog[45] = "";
+        sprintf(strLog, "Battery:  %3.1f %", stateOfCharge);
+        Particle.publish("Battery", strLog, PRIVATE);
         
         if (inServiceMode == 0)
         {
+            //TODO: add a longer sleep at night when nobody cares about updates
             System.sleep(SLEEP_MODE_DEEP, pollingInterval);
         }
         else
@@ -127,48 +141,51 @@ void loop()
             // we're in service mode; 
             // still wait out the polling interval, 
             // but do it without sleeping
+            theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
+            theme.apply();
+            
             int i;
             for (i = 0; i < pollingInterval; i++)
             {
-                theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN);
-                theme.apply();
-                delay(1000);
+               delay(1000);
              }
             
         }
         
-        Serial.println("Can't reach this line, sleeping.");
+        Serial.println("I'm in service mode");
         
     } // end if wifi ready
     
     delay(1000); // wifi must not have been ready. Wait a sec.
 }
 
-
 void displayTemp(double temp, int type)
 {
-    // where to draw each thing
-    //int xs[] = {100, 35, 350}; // left edges
-    int ls[] = {0, 0, 304};    // left edges
-    int ts[] = {138, 563, 563};// top edges
-    int rs[] = {500, 290, 600};// right edges
-    char prefix = (type == UPDATE_TEMP) ? 'B' : 'S';
-    
+    // Display a temp.
+    // Temp to display needs to be between -199 and 199
     temp = temp + 0.5 - (temp < 0);
     int t = (int)temp;
+    if (t < -199) t = -199;
+    if (t >  199) t =  199;
     
+    // where to draw each thing
+    int ls[] = {0, 0, 304};     // left edges
+    int ts[] = {138, 563, 563}; // top edges
+    int rs[] = {500, 290, 600}; // right edges
+    char prefix = (type == UPDATE_TEMP) ? 'B' : 'S';
+ 
+    // blank out the old value
+    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
+    epd_fill_rect(ls[type], ts[type], rs[type], (ts[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
+    epd_set_color(BLACK, WHITE); // back to black on white
+   
+    // separate out the digits to be displayed one at a time
     int huns = (int)(abs(t) >= 100);
     int tens = (int)(abs(t - (huns * 100)) / 10);
     int ones = (int)(abs(t) % 10);
 
     int x = computeLeftEdge((type == UPDATE_DEW_POINT && t < 0), huns, tens, ones, type);
     int y = ts[type];
-
-    // blank out the old values
-    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
-    epd_fill_rect(ls[type], ts[type], rs[type], (ts[type] + ((type == UPDATE_TEMP) ? 217 : 110)));
-    epd_set_color(BLACK, WHITE); // back to black on white
-
 
     char filename[7] = "";
     
@@ -180,7 +197,7 @@ void displayTemp(double temp, int type)
         x = x + 30;
     }
     
-    if (huns > 0) 
+    if (huns > 0) // display a 1
     {
         sprintf(filename, "%c1.BMP", prefix);
         Serial.println(filename);
@@ -188,7 +205,7 @@ void displayTemp(double temp, int type)
         x = x + ((type == UPDATE_TEMP) ? bigWidths[1] : lilWidths[1]);
     }
     
-    if (tens > 0 || huns > 0) 
+    if (tens > 0 || huns > 0) // display a tens digit if the number is 2 or 3 digits long
     {
         sprintf(filename, "%c%d.BMP", prefix, tens);
         Serial.println(filename);
@@ -196,7 +213,7 @@ void displayTemp(double temp, int type)
         x = x + ((type == UPDATE_TEMP) ? bigWidths[tens] : lilWidths[tens]);
     }
     
-    sprintf(filename, "%c%d.BMP", prefix, ones);
+    sprintf(filename, "%c%d.BMP", prefix, ones); // always display a ones digit
     Serial.println(filename);
     epd_disp_bitmap(filename, x, y);
 }
@@ -219,8 +236,6 @@ int computeLeftEdge(bool isNegative, int hundreds, int tens, int ones, int type)
     
     return leftEdge;    
 }
-
-
 
 int resetTempAndDewPoint()
 {
@@ -356,6 +371,7 @@ void enterServiceMode()
     {
         inServiceMode = 1;
         Serial.println("Entering service mode.");
+        // we'll stay here until the photon is reset manually
     }
 }
 
@@ -447,7 +463,6 @@ int setCityCode(String command)
 
 int setApiKey(String command)
 {
-    // careful... easy to break everything
     command.toCharArray(apiKey,33);
     if (verbosity >= 1)
     {
@@ -473,3 +488,5 @@ void epd_wakeup(void)
 	digitalWrite(wake_up, LOW);
 	delay(10);
 }
+
+
