@@ -14,13 +14,14 @@ int   tZone  = -7;      // Time zone
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 
-// TODO: implement this
+// TODO: implement this...
 // should we call the web for updates, or use pub/sub with another station?
-//enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
-//int weatherSource = CALL_WEATHERMOJO;      
+// still need to write the event handler 
+enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
+int weatherSource = CALL_WEATHERMOJO;      
 
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
-unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
+unsigned int pollingInterval = 60; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
 String lastUpdateTimeString = "";
 
 double tempF = -459.67;
@@ -28,7 +29,7 @@ double hiTempF = -459.67;
 double dewPointF = -459.67;
 
 // wake-up pin
-int wake_up = D2; 
+int wake_epaper = D2;          // epaper wakeup
 int wake_particle_button = D4; // momentary switch connects 3.3V to D4 (INPUT_PULLUP)
 int service_mode = D6;         // momentary switch connects GND to D6 (INPUT_PULLUP)
 
@@ -69,6 +70,9 @@ void setup()
     theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
     theme.apply(); 
     
+    // subscribe to weather updates, maybe
+    if (weatherSource == CALL_WEATHERMOJO) Particle.subscribe("polo", poloHandler, MY_DEVICES);
+    
     epd_init();
     epd_wakeup();
     epd_set_memory(MEM_TF);     // flash memory (MEM_NAND is onboard, MEM_TF is SD Card)
@@ -97,7 +101,7 @@ void loop()
 		epd_wakeup();
         
         Serial.printlnf("Starting a new loop.");
-        // once a day, refresh the high temperature data document & get forecast high
+        // refresh the high temperature data document & get forecast high
         int successfulReset = resetHiTemp();
         if (successfulReset != 0)  hiTempF = -100; // set it to a ridiculous value so we know something is wrong.
 
@@ -128,31 +132,8 @@ void loop()
         // so leave some time to receive commands or press the service mode button
         delay(5000);
         
-        float stateOfCharge = batteryMonitor.getSoC();
-        char strLog[45] = "";
-        sprintf(strLog, "Battery:  %3.1f %", stateOfCharge);
-        Particle.publish("Battery", strLog, PRIVATE);
-        
-        if (inServiceMode == 0)
-        {
-            //TODO: add a longer sleep at night when nobody cares about updates
-            System.sleep(SLEEP_MODE_DEEP, pollingInterval);
-        }
-        else
-        {
-            // we're in service mode; 
-            // still wait out the polling interval, 
-            // but do it without sleeping
-            theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
-            theme.apply();
-            
-            int i;
-            for (i = 0; i < pollingInterval; i++)
-            {
-               delay(1000);
-             }
-            
-        }
+        if (verbosity > 0) publishBatteryState();
+        waitForNextTime();
         
         Serial.println("I'm in service mode");
         
@@ -250,11 +231,44 @@ int resetTempAndDewPoint()
     char conditionsRequestPath[100];
     sprintf(conditionsRequestPath, "/v2.0/current?key=%s&city_id=%d&units=I", apiKey, cityId);
 
-    int conditionsRefreshed = refreshJson(conditionsRequestPath);
+    int conditionsRefreshed;
+    if (weatherSource == CALL_WEATHERMOJO) 
+    {
+        // get a JSON from another weather station
+        Particle.publish("marco", "weather, please", PRIVATE);
+        String originalUpdateTime = lastUpdateTimeString;
+        
+        int maxWait = 30;
+        int waited = 0;
+        conditionsRefreshed = -1;
+        while(conditionsRefreshed != 0 && waited < maxWait)
+        {
+            if (waited > 0) delay(1000);
+            waited = waited + 1;
+            if (lastUpdateTimeString != originalUpdateTime)
+            {
+                conditionsRefreshed = 0;
+            }
+            if (waited == maxWait) Particle.publish("Error", "Never did get a polo outta that marco.", PRIVATE);
+        }
+    }
+    else
+    {
+        // get JSON from the web
+       conditionsRefreshed = refreshJsonFromWeb(conditionsRequestPath);
+    }
+        
     if (conditionsRefreshed == 0) 
     {
         double tF = weatherDoc["data"][0]["temp"];
         double dF = weatherDoc["data"][0]["dewpt"];
+        double hF = -100;
+        if (weatherSource == CALL_WEATHERMOJO)
+        {
+            // if our updates are coming from WeatherMojo, the update has our hi temp too
+            hF = weatherDoc["data"][0]["max_temp"];
+            if (hF > 10 && hF < 130) hiTempF = hF;
+        }
         Serial.printlnf("conditions retrieved: Temp %f F, DP %f F", tF, dF);
         
         if (tF > 10 && tF < 130) 
@@ -295,9 +309,20 @@ int resetHiTemp()
     char forecastRequestPath[100];
     sprintf(forecastRequestPath, "/v2.0/forecast/daily?key=%s&days=1&city_id=%d&units=I", apiKey, cityId);
     
-    int forecastRefreshed = refreshJson(forecastRequestPath);
+    int forecastRefreshed = -1;
+     if (weatherSource == CALL_WEATHERMOJO) 
+    {
+        // we're getting updates from the other weather station.
+        // the hi temp is already in the doc, and was set by the hnadler.
+        // Let's assume that all went fine and we don't need to do anything here
+        return returnVal;
+    }
+    else
+    {
+        forecastRefreshed = refreshJsonFromWeb(forecastRequestPath);
+    }
     
-    if (forecastRefreshed == 0) 
+    if (forecastRefreshed == 0) //that's good
     {
         Serial.println("forecast refresh successful.");
     
@@ -322,9 +347,7 @@ int resetHiTemp()
     return returnVal;
 }
 
-
-
-int refreshJson(String requestPath)
+int refreshJsonFromWeb(String requestPath)
 {
     // use the global httpclient to request a path
     int returnVal = 0;
@@ -358,6 +381,38 @@ int refreshJson(String requestPath)
 
     Serial.printf("returning %d\n", returnVal);
     return returnVal;
+}
+
+void publishBatteryState()
+{
+    float stateOfCharge = batteryMonitor.getSoC();
+    char strLog[45] = "";
+    sprintf(strLog, "Battery:  %3.1f %", stateOfCharge);
+    Particle.publish("Battery", strLog, PRIVATE);
+}
+
+void waitForNextTime()
+{
+    if (inServiceMode == 0)
+    {
+        //TODO: add a longer sleep at night when nobody cares about updates
+        System.sleep(SLEEP_MODE_DEEP, pollingInterval);
+    }
+    else
+    {
+        // we're in service mode; 
+        // still wait out the polling interval, 
+        // but do it without sleeping
+        theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
+        theme.apply();
+        
+        int i;
+        for (i = 0; i < pollingInterval; i++)
+        {
+           delay(1000);
+         }
+        
+    }
 }
 
 void enterServiceMode()
@@ -469,15 +524,22 @@ int setApiKey(String command)
 void epd_init(void)
 {
 	Serial1.begin(115200);
-	pinMode(wake_up, OUTPUT);
+	pinMode(wake_epaper, OUTPUT);
 }
 
 void epd_wakeup(void)
 {
-	digitalWrite(wake_up, LOW);
+	digitalWrite(wake_epaper, LOW);
 	delayMicroseconds(10);
-	digitalWrite(wake_up, HIGH);
+	digitalWrite(wake_epaper, HIGH);
 	delayMicroseconds(500);
-	digitalWrite(wake_up, LOW);
+	digitalWrite(wake_epaper, LOW);
 	delay(10);
+}
+
+void poloHandler(const char *event, const char *data)
+{
+    DeserializationError error = deserializeJson(weatherDoc, data);
+    if(!error) lastUpdateTimeString = Time.format(Time.now(),TIME_FORMAT_ISO8601_FULL);
+    else Particle.publish("Error", "Problem getting json from the other weather station", PRIVATE);
 }
