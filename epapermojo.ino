@@ -13,10 +13,14 @@ int   tZone  = -7;      // Time zone
 
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
-int makeActualCalls = 1;      // 1 means make real web calls. Any other value stops making web calls.
+
+// TODO: implement this
+// should we call the web for updates, or use pub/sub with another station?
+//enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
+//int weatherSource = CALL_WEATHERMOJO;      
+
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
-unsigned int pollingInterval = 60; //Seconds
-unsigned long lastPoll = 0 - pollingInterval; // last time we called the web service
+unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
 String lastUpdateTimeString = "";
 
 double tempF = -459.67;
@@ -89,8 +93,6 @@ void loop()
 
     if (wifiReady) 
     {
-		lastPoll = now;
-		
 		//wake up the e-paper
 		epd_wakeup();
         
@@ -327,40 +329,33 @@ int refreshJson(String requestPath)
     // use the global httpclient to request a path
     int returnVal = 0;
 
-    if (makeActualCalls == 1)
+    request.path = requestPath;
+    http.get(request, response, headers);
+    int responseStatus = response.status;
+    
+    if (responseStatus == 200)
     {
-        request.path = requestPath;
-        http.get(request, response, headers);
-        int responseStatus = response.status;
+        // great
+        Serial.printlnf("Got a response of %d bytes", response.body.length());
+        Serial.println(response.body);
         
-        if (responseStatus == 200)
+        char json[1600];
+        response.body.toCharArray(json, 1600);
+        DeserializationError error = deserializeJson(weatherDoc, json);
+        
+        if (error) 
         {
-            // great
-            Serial.printlnf("Got a response of %d bytes", response.body.length());
-            Serial.println(response.body);
-            
-            char json[1600];
-            response.body.toCharArray(json, 1600);
-            DeserializationError error = deserializeJson(weatherDoc, json);
-            
-            if (error) 
-            {
-                Serial.printlnf(error.c_str());
-                returnVal = -1;
-            }
-        }
-        else
-        {
-            Serial.printlnf("Error Response %d", response.status);
-            Serial.printlnf(response.body);
+            Serial.printlnf(error.c_str());
             returnVal = -1;
         }
     }
     else
     {
-        Serial.printlnf("not making real calls. LOL nothing matters.");
+        Serial.printlnf("Error Response %d", response.status);
+        Serial.printlnf(response.body);
         returnVal = -1;
     }
+
     Serial.printf("returning %d\n", returnVal);
     return returnVal;
 }
@@ -380,7 +375,6 @@ void registerFunctions()
     Particle.variable("Temp", tempF);
     Particle.variable("DewPoint", dewPointF);
     Particle.variable("HiTemp", hiTempF);
-    Particle.variable("MakeActualCalls", makeActualCalls);
     Particle.variable("LastUpdate", lastUpdateTimeString);
     Particle.variable("Service", inServiceMode);
     
@@ -451,7 +445,6 @@ int setCityCode(String command)
     int newCode = command.toInt();
     cityId = newCode;
     // and update conditions right away.
-    lastPoll = lastPoll - pollingInterval;
     if (verbosity >= 1)
     {
         char strLog[25] = "";
@@ -488,5 +481,3 @@ void epd_wakeup(void)
 	digitalWrite(wake_up, LOW);
 	delay(10);
 }
-
-
