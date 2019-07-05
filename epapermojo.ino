@@ -8,20 +8,18 @@
 // char[33] apiKey = "0123456789abcdef0123456789abcdef";
 #include "WeatherbitKey.h"
 
+// should we call the web for updates, or use pub/sub with another station?
+enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
+int weatherSource = CALL_WEATHERMOJO;      
+
 int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
 int   tZone  = -7;      // Time zone
 
 LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 
-// TODO: implement this...
-// should we call the web for updates, or use pub/sub with another station?
-// still need to write the event handler 
-enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
-int weatherSource = CALL_WEATHERMOJO;      
-
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
-unsigned int pollingInterval = 60; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
+unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
 String lastUpdateTimeString = "";
 
 double tempF = -459.67;
@@ -69,9 +67,6 @@ void setup()
     // turn off the breathing cyan LED
     theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
     theme.apply(); 
-    
-    // subscribe to weather updates, maybe
-    if (weatherSource == CALL_WEATHERMOJO) Particle.subscribe("polo", poloHandler, MY_DEVICES);
     
     epd_init();
     epd_wakeup();
@@ -235,7 +230,7 @@ int resetTempAndDewPoint()
     if (weatherSource == CALL_WEATHERMOJO) 
     {
         // get a JSON from another weather station
-        Particle.publish("marco", "weather, please", PRIVATE);
+        Particle.publish("weathermojo_request", "Need a cheez", PRIVATE);
         String originalUpdateTime = lastUpdateTimeString;
         
         int maxWait = 30;
@@ -446,6 +441,9 @@ void registerFunctions()
     success ? Serial.println("Registered set_hi_temp") : Serial.println("Failed to register set_hi_temp");
     success = Particle.function("set_dew_point", setDewPoint);
     success ? Serial.println("Registered set_dew_point") : Serial.println("Failed to register set_dew_point");
+    
+    // subscribe to weather updates, maybe
+    if (weatherSource == CALL_WEATHERMOJO) Particle.subscribe("weathermojo_response", cheezHandler, MY_DEVICES);
 }
 
 int setTemp(String command)
@@ -537,9 +535,10 @@ void epd_wakeup(void)
 	delay(10);
 }
 
-void poloHandler(const char *event, const char *data)
+void cheezHandler(const char *event, const char *data)
 {
     DeserializationError error = deserializeJson(weatherDoc, data);
     if(!error) lastUpdateTimeString = Time.format(Time.now(),TIME_FORMAT_ISO8601_FULL);
     else Particle.publish("Error", "Problem getting json from the other weather station", PRIVATE);
 }
+
