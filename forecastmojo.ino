@@ -399,6 +399,8 @@ void registerFunctions()
     success ? Serial.println("Registered set_city_code") : Serial.println("Failed to register set_city_code");
     success = Particle.function("set_api_key", setApiKey);
     success ? Serial.println("Registered set_api_key") : Serial.println("Failed to register set_api_key");
+    
+    Particle.subscribe("marco", marcoHandler, MY_DEVICES);
 }
 
 int setPollingInterval(String command)
@@ -524,7 +526,6 @@ int setCityCode(String command)
 
 int setApiKey(String command)
 {
-    // careful... easy to break everything
     command.toCharArray(apiKey,33);
     if (verbosity >= 1)
     {
@@ -533,4 +534,13 @@ int setApiKey(String command)
         Particle.publish("Command", strLog, PRIVATE);
     }
     return 0;
+}
+
+
+void marcoHandler(const char *event, const char *data)
+{
+    char jsonToPublish[1000] = "";
+    sprintf(jsonToPublish, "{\"data\": [{\"temp\": %3.1f,\"dewpt\": %3.1f,\"max_temp\": %3.1f}]}", tempF, dewPointF, hiTempF);
+            
+    Particle.publish("polo", jsonToPublish, PRIVATE);
 }
