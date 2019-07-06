@@ -20,13 +20,15 @@ int verbosity = 2;            // 0: don't say much, 2: say lots
 
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
 unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
+int longSleepHour = 23;       // the first update on or after this hour will result in a long sleep
+int longSleepInterval = 18000;// how long to sleep for a long sleep (seconds)
 String lastUpdateTimeString = "";
 
 double tempF = -459.67;
 double hiTempF = -459.67;
 double dewPointF = -459.67;
 
-// wake-up pin
+// wake-up pins & service mode
 int wake_epaper = D2;          // epaper wakeup
 int wake_particle_button = D4; // momentary switch connects 3.3V to D4 (INPUT_PULLUP)
 int service_mode = D6;         // momentary switch connects GND to D6 (INPUT_PULLUP)
@@ -42,13 +44,15 @@ http_request_t request;
 http_response_t response;
 DynamicJsonDocument weatherDoc(1600);
 
+// typeface stuff
 const int bigWidths[] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
 const int lilWidths[] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
 enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
+
+// battery indicator stuff
 char loBatBmp[] = "LOBATT.BMP";
 int loBatPosition[] = {524, 452}; // height 24px
 float loBatThreshold = 10; // percent from batteryMonitor.getSoC();
-
 PowerShield batteryMonitor;
 
 void setup()
@@ -95,8 +99,6 @@ void loop()
 
     if (wifiReady) 
     {
-		//wake up the e-paper
-		epd_wakeup();
         
         Serial.printlnf("Starting a new loop.");
         // refresh the high temperature data document & get forecast high
@@ -119,21 +121,23 @@ void loop()
             Serial.println("at least one of temp and dewpoint was not set properly and I am sad.");
         }
         
+		//wake up the e-paper
+		epd_wakeup();
         displayBattery();
-        
         displayTemp(tempF, UPDATE_TEMP);
         displayTemp(dewPointF, UPDATE_DEW_POINT);
         displayTemp(hiTempF, UPDATE_HI_TEMP);
-
         epd_update();       
         epd_enter_stopmode();
+        // Zzzzzzz
+        
+        if (verbosity > 0) publishBatteryState();
         
         // THIS WILL NEVER LOOP unless we're in service mode
         // so leave some time to receive commands or press the service mode button
         delay(5000);
         
-        if (verbosity > 0) publishBatteryState();
-        waitForNextTime();
+        waitForNextTime(); // either sleeps or delays, depending on whether we're in service mode
         
         Serial.println("I'm in service mode");
         
@@ -404,10 +408,13 @@ void publishBatteryState()
 
 void waitForNextTime()
 {
+    int interval;
+    if (Time.hour() >= longSleepHour) interval = longSleepInterval;
+    else interval = pollingInterval;
+    
     if (inServiceMode == 0)
     {
-        //TODO: add a longer sleep at night when nobody cares about updates
-        System.sleep(SLEEP_MODE_DEEP, pollingInterval);
+        System.sleep(SLEEP_MODE_DEEP, interval);
     }
     else
     {
@@ -418,7 +425,7 @@ void waitForNextTime()
         theme.apply();
         
         int i;
-        for (i = 0; i < pollingInterval; i++)
+        for (i = 0; i < interval; i++)
         {
            delay(1000);
          }
