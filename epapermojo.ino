@@ -10,7 +10,7 @@
 
 // should we call the web for updates, or use pub/sub with another station?
 enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
-int weatherSource = CALL_WEATHERMOJO;      
+int weatherSource = CALL_WEATHERBIT;      
 
 int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
 int   tZone  = -7;      // Time zone
@@ -45,6 +45,9 @@ DynamicJsonDocument weatherDoc(1600);
 const int bigWidths[] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
 const int lilWidths[] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
 enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
+char loBatBmp[] = "LOBATT.BMP";
+int loBatPosition[] = {524, 452}; // height 24px
+float loBatThreshold = 10; // percent from batteryMonitor.getSoC();
 
 PowerShield batteryMonitor;
 
@@ -116,6 +119,8 @@ void loop()
             Serial.println("at least one of temp and dewpoint was not set properly and I am sad.");
         }
         
+        displayBattery();
+        
         displayTemp(tempF, UPDATE_TEMP);
         displayTemp(dewPointF, UPDATE_DEW_POINT);
         displayTemp(hiTempF, UPDATE_HI_TEMP);
@@ -135,6 +140,17 @@ void loop()
     } // end if wifi ready
     
     delay(1000); // wifi must not have been ready. Wait a sec.
+}
+
+void displayBattery()
+{
+    float stateOfCharge = batteryMonitor.getSoC();
+    // draw a white rectangle to blot out the old state
+    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
+    epd_fill_rect(loBatPosition[0], loBatPosition[1], loBatPosition[0] + 48, loBatPosition[1] + 24);
+    epd_set_color(BLACK, WHITE); // back to black on white
+    // if the battery is below the threshold, display the low batt bitmap
+    if (stateOfCharge < loBatThreshold) epd_disp_bitmap(loBatBmp, loBatPosition[0], loBatPosition[1]);
 }
 
 void displayTemp(double temp, int type)
@@ -383,7 +399,7 @@ void publishBatteryState()
     float stateOfCharge = batteryMonitor.getSoC();
     char strLog[45] = "";
     sprintf(strLog, "Battery:  %3.1f %", stateOfCharge);
-    Particle.publish("Battery", strLog, PRIVATE);
+    if (verbosity > 1) Particle.publish("Battery", strLog, PRIVATE);
 }
 
 void waitForNextTime()
