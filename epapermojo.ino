@@ -81,20 +81,14 @@ void setup()
     epd_screen_rotation(3);     // sideways
     epd_set_color(BLACK, WHITE);// black on white
     epd_clear();
-	
-    epd_set_en_font(ASCII48);   // med typeface
-
     epd_disp_bitmap("BACK.BMP", 0, 0);
 
     registerFunctions();
 }
 
 
-
 void loop()
 {
-    Particle.process();
-    unsigned long now = millis();
     bool wifiReady = WiFi.ready();
 
     if (wifiReady) 
@@ -104,7 +98,6 @@ void loop()
         // refresh the high temperature data document & get forecast high
         int successfulReset = resetHiTemp();
         if (successfulReset != 0)  hiTempF = -100; // set it to a ridiculous value so we know something is wrong.
-
         
         // refresh the current conditions data document & get temp + dew point
         int successfulConditionsSet = resetTempAndDewPoint();
@@ -121,15 +114,13 @@ void loop()
             Serial.println("at least one of temp and dewpoint was not set properly and I am sad.");
         }
         
-	//wake up the e-paper
-	epd_wakeup();
-        displayBattery();
-        displayTemp(tempF, UPDATE_TEMP);
-        displayTemp(dewPointF, UPDATE_DEW_POINT);
-        displayTemp(hiTempF, UPDATE_HI_TEMP);
-        epd_update();       
-        epd_enter_stopmode();
-        // Zzzzzzz
+        epd_wakeup();                             // wake up the e-paper
+        displayBattery();                         // display low battery warning if required
+        displayTemp(tempF, UPDATE_TEMP);          // Arrange bitmaps for the temperature
+        displayTemp(dewPointF, UPDATE_DEW_POINT); // for the dew point
+        displayTemp(hiTempF, UPDATE_HI_TEMP);     // for the forecast high temp
+        epd_update();                             // tell the screen to show it all
+        epd_enter_stopmode();                     // Zzzzzzz
         
         if (verbosity > 0) publishBatteryState();
         
@@ -429,18 +420,13 @@ void waitForNextTime()
         {
            delay(1000);
          }
-        
     }
 }
 
 void enterServiceMode()
 {
-    if (inServiceMode == 0)
-    {
-        inServiceMode = 1;
-        Serial.println("Entering service mode.");
-        // we'll stay here until the photon is reset manually
-    }
+    inServiceMode = 1;
+    Serial.println("Entering service mode."); // we'll stay here until the photon is reset manually
 }
 
 void registerFunctions()
