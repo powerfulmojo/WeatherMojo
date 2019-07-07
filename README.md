@@ -10,8 +10,9 @@ Particle function and variables are documented at https://www.powerfulmojo.com/w
 * [forecastmojo.ino](./forecastmojo.ino) : Firmware to run a weather station showing forecast hi temp
 * [weathermojo.ino](./weathermojo.ino) : Firmware to run a weather station showing observed hi temp
 * [steppertest.ino](./steppertest.ino) : Firmware to mess with your stepper motors for testing and calibration
+* [epapermojo.ino](./epapermojo.ino) : Firmware to run a separate e-paper weather station
 
-The [weathermojo](weathermojo.ino) and [forecastmojo](forecastmojo.ino) firmwares use different weather APIs and use the high temperature stepper motor differently.<br />[forecastmojo.ino](./forecastmojo.ino) uses [weatherbit.io](http://weatherbit.io/) and displays today's forecast high.<br />[weathermojo.ino](./weathermojo.ino) uses [openweathermap.org](http://openweathermap.org/) and displays the highest temperature so far today.
+The [weathermojo](weathermojo.ino) and [forecastmojo](forecastmojo.ino) firmwares use different weather APIs and use the high temperature stepper motor differently.<br />[forecastmojo.ino](./forecastmojo.ino) uses [weatherbit.io](http://weatherbit.io/) and displays today's forecast high.<br />[weathermojo.ino](./weathermojo.ino) uses [openweathermap.org](http://openweathermap.org/) and displays the highest temperature so far today.<br /><br />The [epapermojo.ino](./epapermojo.ino) firmware powers a separate e-paper-based weather station. Depending on its configuration, it can get weather from the web all by itself, or it can subscribe to updates from the  [forecastmojo.ino](./forecastmojo.ino) device.
 
 ## Weather Forecasting Firmware ([forecastmojo.ino](./forecastmojo.ino))
 Retrieves weather conditions and forecast from [weatherbit.io](http://weatherbit.io). Displays current temperature on the "big hand" of the temperature dial. Displays the forecast high temperature on a "needle" on the same dial. Displays the dew point on a separate small dial.<br />
