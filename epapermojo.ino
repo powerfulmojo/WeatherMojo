@@ -78,9 +78,9 @@ void setup()
     epd_init();
     epd_wakeup();
     epd_set_memory(MEM_TF);     // flash memory (MEM_NAND is onboard, MEM_TF is SD Card)
-	epd_screen_rotation(3);     // sideways
-	epd_set_color(BLACK, WHITE);// black on white
-	epd_clear();
+    epd_screen_rotation(3);     // sideways
+    epd_set_color(BLACK, WHITE);// black on white
+    epd_clear();
 	
     epd_set_en_font(ASCII48);   // med typeface
 
@@ -121,8 +121,8 @@ void loop()
             Serial.println("at least one of temp and dewpoint was not set properly and I am sad.");
         }
         
-		//wake up the e-paper
-		epd_wakeup();
+	//wake up the e-paper
+	epd_wakeup();
         displayBattery();
         displayTemp(tempF, UPDATE_TEMP);
         displayTemp(dewPointF, UPDATE_DEW_POINT);
