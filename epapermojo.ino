@@ -3,7 +3,6 @@
 #include <ArduinoJson.h>
 #include "HttpClient.h"
 #include "epd.h" // from https://www.waveshare.com/wiki/4.3inch_e-Paper_UART_Module#Resources
-#include <PowerShield.h>
 // Include your own weatherbit API key in WeatherbitKey.h or uncomment & enter it on the next line
 // char[33] apiKey = "0123456789abcdef0123456789abcdef";
 #include "WeatherbitKey.h"
@@ -19,7 +18,7 @@ LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
-unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
+unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 500 calls/day)
 int longSleepHour = 23;       // the first update on or after this hour will result in a long sleep
 int longSleepInterval = 18000;// how long to sleep for a long sleep (seconds)
 String lastUpdateTimeString = "";
@@ -32,6 +31,7 @@ double dewPointF = -459.67;
 int wake_epaper = D2;          // epaper wakeup
 int wake_particle_button = D4; // momentary switch connects 3.3V to D4 (INPUT_PULLUP)
 int service_mode = D6;         // momentary switch connects GND to D6 (INPUT_PULLUP)
+int lo_batt = A3;              // read the powerbost's LBO pin (HIGH means battery is fine, LOW means battery is low)
 
 //global httpclient stuff
 HttpClient http;
@@ -44,7 +44,7 @@ http_request_t request;
 http_response_t response;
 DynamicJsonDocument weatherDoc(1600);
 
-// typeface stuff
+// typeface stuff: the width in pixels of each digit 0-9
 const int bigWidths[] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
 const int lilWidths[] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
 enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
@@ -52,8 +52,6 @@ enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
 // battery indicator stuff
 char loBatBmp[] = "LOBATT.BMP";
 int loBatPosition[] = {524, 452}; // height 24px
-float loBatThreshold = 10; // percent from batteryMonitor.getSoC();
-PowerShield batteryMonitor;
 
 void setup()
 {
@@ -62,11 +60,9 @@ void setup()
     
     pinMode(wake_particle_button, INPUT_PULLUP);
     pinMode(service_mode, INPUT_PULLUP);
+    pinMode(lo_batt, INPUT);
     attachInterrupt(service_mode, enterServiceMode, FALLING);
     
-    // battery meter stuff
-    batteryMonitor.begin();
-    batteryMonitor.quickStart();
 
     request.hostname = "api.weatherbit.io";
     request.port = 80;
@@ -78,7 +74,7 @@ void setup()
     epd_init();
     epd_wakeup();
     epd_set_memory(MEM_TF);     // flash memory (MEM_NAND is onboard, MEM_TF is SD Card)
-    epd_screen_rotation(3);     // sideways
+    epd_screen_rotation(3);     // portrait orientation
     epd_set_color(BLACK, WHITE);// black on white
     epd_clear();
     epd_disp_bitmap("BACK.BMP", 0, 0);
@@ -122,8 +118,6 @@ void loop()
         epd_update();                             // tell the screen to show it all
         epd_enter_stopmode();                     // Zzzzzzz
         
-        if (verbosity > 0) publishBatteryState();
-        
         // THIS WILL NEVER LOOP unless we're in service mode
         // so leave some time to receive commands or press the service mode button
         delay(5000);
@@ -139,13 +133,14 @@ void loop()
 
 void displayBattery()
 {
-    float stateOfCharge = batteryMonitor.getSoC();
     // draw a white rectangle to blot out the old state
     epd_set_color(WHITE, BLACK); // white rectangles to erase old data
     epd_fill_rect(loBatPosition[0], loBatPosition[1], loBatPosition[0] + 48, loBatPosition[1] + 24);
     epd_set_color(BLACK, WHITE); // back to black on white
-    // if the battery is below the threshold, display the low batt bitmap
-    if (stateOfCharge < loBatThreshold) epd_disp_bitmap(loBatBmp, loBatPosition[0], loBatPosition[1]);
+    
+    // Uf the LBO pin digitalRead==0, battery voltage has dropped below 3.2V
+    // show the low battery graphic
+    if (digitalRead(lo_batt) == LOW) epd_disp_bitmap(loBatBmp, loBatPosition[0], loBatPosition[1]);
 }
 
 void displayTemp(double temp, int type)
@@ -389,13 +384,6 @@ int refreshJsonFromWeb(String requestPath)
     return returnVal;
 }
 
-void publishBatteryState()
-{
-    float stateOfCharge = batteryMonitor.getSoC();
-    char strLog[45] = "";
-    sprintf(strLog, "Battery:  %3.1f %", stateOfCharge);
-    if (verbosity > 1) Particle.publish("Battery", strLog, PRIVATE);
-}
 
 void waitForNextTime()
 {
