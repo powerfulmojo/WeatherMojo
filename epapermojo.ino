@@ -10,7 +10,7 @@
 
 // should we call the web for updates, or use pub/sub with another station?
 enum { CALL_WEATHERBIT, CALL_WEATHERMOJO };
-int weatherSource = CALL_WEATHERBIT;      
+int weatherSource = CALL_WEATHERMOJO;      
 
 int   cityId = 5308655; // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
 int   tZone  = -7;      // Time zone
@@ -19,7 +19,7 @@ LEDSystemTheme theme;         // Custom LED theme, set in setup()
 int verbosity = 2;            // 0: don't say much, 2: say lots
 
 int inServiceMode = 0;        // 1 means we're in service mode, don't sleep
-unsigned int pollingInterval = 900; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
+unsigned int pollingInterval = 1200; //Seconds (if you're on the free plan, you're limited to 1,000 calls/day)
 int longSleepHour = 23;       // the first update on or after this hour will result in a long sleep
 int longSleepInterval = 18000;// how long to sleep for a long sleep (seconds)
 String lastUpdateTimeString = "";
@@ -30,8 +30,8 @@ double dewPointF = -459.67;
 
 // wake-up pins & service mode
 int wake_epaper = D2;          // epaper wakeup
-int wake_particle_button = D4; // momentary switch connects 3.3V to D4 (INPUT_PULLUP)
 int service_mode = D6;         // momentary switch connects GND to D6 (INPUT_PULLUP)
+int pwr_connected = D4;        // connected to power shield "USB Good" (INPUT_PULLUP)
 
 //global httpclient stuff
 HttpClient http;
@@ -51,8 +51,12 @@ enum { UPDATE_TEMP, UPDATE_DEW_POINT, UPDATE_HI_TEMP };
 
 // battery indicator stuff
 char loBatBmp[] = "LOBATT.BMP";
+char hiBatBmp[] = "HIBATT.BMP";
 int loBatPosition[] = {524, 452}; // height 24px
-float loBatThreshold = 10; // percent from batteryMonitor.getSoC();
+float loBatThreshold = 10; // hsow the battery-low indicator (percent from batteryMonitor.getSoC())
+float hiBatThreshold = 95; // show the battery-full indicator
+double permanentShutdown = 2; // go to sleep indefinitely so we never run the battery totally dead
+double lastBatteryState = -1;
 PowerShield batteryMonitor;
 
 void setup()
@@ -60,8 +64,8 @@ void setup()
     Serial.begin(9600);
     Time.zone(tZone);
     
-    pinMode(wake_particle_button, INPUT_PULLUP);
     pinMode(service_mode, INPUT_PULLUP);
+    pinMode(pwr_connected, INPUT_PULLUP);
     attachInterrupt(service_mode, enterServiceMode, FALLING);
     
     // battery meter stuff
@@ -115,15 +119,15 @@ void loop()
         }
         
         epd_wakeup();                             // wake up the e-paper
-        displayBattery();                         // display low battery warning if required
+        displayBattery();                         // display low battery or high battery icon 
         displayTemp(tempF, UPDATE_TEMP);          // Arrange bitmaps for the temperature
         displayTemp(dewPointF, UPDATE_DEW_POINT); // for the dew point
         displayTemp(hiTempF, UPDATE_HI_TEMP);     // for the forecast high temp
         epd_update();                             // tell the screen to show it all
         epd_enter_stopmode();                     // Zzzzzzz
         
-        if (verbosity > 0) publishBatteryState();
-        
+        publishBatteryState();
+         
         // THIS WILL NEVER LOOP unless we're in service mode
         // so leave some time to receive commands or press the service mode button
         delay(5000);
@@ -140,12 +144,15 @@ void loop()
 void displayBattery()
 {
     float stateOfCharge = batteryMonitor.getSoC();
+    bool usb_good = (digitalRead(pwr_connected) == LOW); //LOW = USB connected
+    
     // draw a white rectangle to blot out the old state
     epd_set_color(WHITE, BLACK); // white rectangles to erase old data
     epd_fill_rect(loBatPosition[0], loBatPosition[1], loBatPosition[0] + 48, loBatPosition[1] + 24);
     epd_set_color(BLACK, WHITE); // back to black on white
-    // if the battery is below the threshold, display the low batt bitmap
+    // if the battery is outside thresholds, display the right batt bitmap
     if (stateOfCharge < loBatThreshold) epd_disp_bitmap(loBatBmp, loBatPosition[0], loBatPosition[1]);
+    if (usb_good && stateOfCharge > hiBatThreshold) epd_disp_bitmap(hiBatBmp, loBatPosition[0], loBatPosition[1]);
 }
 
 void displayTemp(double temp, int type)
@@ -392,9 +399,19 @@ int refreshJsonFromWeb(String requestPath)
 void publishBatteryState()
 {
     float stateOfCharge = batteryMonitor.getSoC();
+    bool usb_good = (digitalRead(pwr_connected) == LOW); //LOW = USB connected
+    
     char strLog[45] = "";
-    sprintf(strLog, "Battery:  %3.1f %", stateOfCharge);
-    if (verbosity > 1) Particle.publish("Battery", strLog, PRIVATE);
+    if (usb_good) 
+    { 
+        sprintf(strLog, "Battery:  %3.1f  usb connected", stateOfCharge); 
+    }
+    else 
+    { 
+        sprintf(strLog, "Battery: %3.1f  no usb", stateOfCharge); 
+    }
+    if (verbosity > 0) Particle.publish("Battery", strLog, PRIVATE);
+    lastBatteryState = (double) stateOfCharge;
 }
 
 void waitForNextTime()
@@ -402,6 +419,9 @@ void waitForNextTime()
     int interval;
     if (Time.hour() >= longSleepHour) interval = longSleepInterval;
     else interval = pollingInterval;
+    
+    // if the battery is way too low, just go to sleep forever
+    if (lastBatteryState < permanentShutdown) System.sleep(SLEEP_MODE_DEEP); 
     
     if (inServiceMode == 0)
     {
@@ -436,6 +456,7 @@ void registerFunctions()
     Particle.variable("HiTemp", hiTempF);
     Particle.variable("LastUpdate", lastUpdateTimeString);
     Particle.variable("Service", inServiceMode);
+    Particle.variable("Battery", lastBatteryState);
     
     bool success = false;
     success = Particle.function("set_polling_interval", setPollingInterval);
