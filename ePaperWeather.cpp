@@ -58,9 +58,9 @@ int ePaperWeather::_roundTemp(double Temp)
 void ePaperWeather::_displayTemp(bool isNegative, int huns, int tens, int ones, int type)
 {
     // where to draw each thing
-    int ls[] = {0, 0, 304};     // left edges of drawing areas
+    int ls[] = {0, 304, 0};     // left edges of drawing areas
     int ts[] = {138, 563, 563}; // top edges
-    int rs[] = {500, 290, 600}; // right edges
+    int rs[] = {500, 600, 290}; // right edges
     char prefix = (type == UPDATE_TEMP) ? _bigPrefix : _lilPrefix;
  
     // blank out the old value
@@ -129,6 +129,8 @@ void ePaperWeather::_updateBat(bool lo, bool hi)
 
 void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt)
 {
+    epd_wakeup();
+            
     epd_set_memory(MEM_TF);     // flash memory (MEM_NAND is onboard, MEM_TF is SD Card)
     epd_screen_rotation(3);     // sideways
     epd_set_color(BLACK, WHITE);// black on white
@@ -140,13 +142,13 @@ void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, b
     _displayTemp(DewPoint, UPDATE_DEW_POINT);
     _updateBat(loBatt, hiBatt);
     epd_update();
+    
+    epd_enter_stopmode();
 }
 
 ePaperWeather::ePaperWeather() { }
+
 ePaperWeather::ePaperWeather(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt)
 {
     this->UpdateDisplay(Temp, HiTemp, DewPoint, loBatt, hiBatt);
 }
-//TODO: ditch the constructor with all the args
-//      implement init(), wakeup() methods
-//      implement displayData(double Temp, double HiTemp, double DewPoint, float StateOfCharge, bool usbConnected);

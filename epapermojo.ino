@@ -5,36 +5,43 @@
 #include "ePaperWeather.h"
 #include "epd.h"
 
-int wake_epaper = D2;       // epaper wakeup pin
-int pwr_connected = D4;     // connected to power shield "USB Good" (INPUT_PULLUP)
+int wake_epaper = D2;   // epaper wakeup pin
+int pwr_connected = D4; // connected to power shield "USB Good" (INPUT_PULLUP)
+int service_mode = D6;  // momentary switch connects GND to D6 (INPUT_PULLUP)
+
+int Tzone  = -7;                // time zone
+int Verbosity = 1;              // 0: only errors, 1: weather updates and errors
+int InServiceMode = 0;          // 1 means we're in service mode, don't sleep
+int PollingInterval = 1800;     // seconds 
+int LongSleepHour = 23;         // the first update on or after this hour will result in a long sleep
+int LongSleepInterval = 18000;  // how long to sleep for a long sleep (seconds)
+float LoBatThreshold = 15;      // display a low battery icon at this %
+float HiBatThreshold = 95;      // display a full battery icon when USB is connected and battery is this %
+float PermanentShutdown = 10;   // if battery drops to this %, don't wake up next time
 
 double Temp = -199;
 double HiTemp = -199;
 double DewPoint = -199;
 
-PowerShield batteryMonitor;
-LEDSystemTheme theme;       // Custom LED theme, set in setup()
-int cityId = 5308655;       // city ID to get weather for (https://www.weatherbit.io/api/meta) (5308655 for Phoenix, 5308049 for PV)
-int tZone  = -7;            // Time zone
-int verbosity = 2;          // 0: don't say much, 2: say lots
-
+PowerShield BatteryMonitor;
+LEDSystemTheme Theme;       // Custom LED theme, set in setup()
 String LastUpdateTimeString = "";
-float LoBatThreshold = 15;
-float HiBatThreshold = 95;
-float PermanentShutdown = 10;
-
-
 
 void setup() {
-    Serial.begin(9600);
-    Time.zone(tZone);
+    Time.zone(Tzone);
     
     // get the battery meter ready to work
-    batteryMonitor.begin();     
-    batteryMonitor.quickStart();
+    BatteryMonitor.begin();     
+    BatteryMonitor.quickStart();
     pinMode(pwr_connected, INPUT_PULLUP);
+    pinMode(service_mode, INPUT_PULLUP);
+    attachInterrupt(service_mode, enterServiceMode, FALLING);
+    
+    // turn off the breathing cyan LED
+    Theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
+    Theme.apply(); 
 
-    // get the epaperdisplay ready to work
+    // get the epaper display ready to work
 	epd_init();                 
     
     // listen for responses to our published weathermojo_request events
@@ -50,37 +57,40 @@ void loop() {
     {
         if (request_cheez()) // we did not time out waiting for a response
         {
-            char strLog[50] = "";
-            sprintf(strLog, "T: %3.2f (hi %3.2f) F\nDP: %3.2f F", Temp, HiTemp, DewPoint);
-            if (verbosity > 0) Particle.publish("Updated", strLog, PRIVATE);
-            LastUpdateTimeString = Time.format(Time.now(),TIME_FORMAT_ISO8601_FULL);
-            
-            float bat_percent = batteryMonitor.getSoC();
+            // figure out if we need to display battery indicators
+            float bat_percent = BatteryMonitor.getSoC();
             bool show_lo_bat = (bat_percent < LoBatThreshold);
             bool show_hi_bat = (bat_percent > HiBatThreshold && digitalRead(pwr_connected) == LOW);
-            if (bat_percent < PermanentShutdown) System.sleep(SLEEP_MODE_DEEP); // sleep forever
+            if (bat_percent < PermanentShutdown) { epd_clear(); System.sleep(SLEEP_MODE_DEEP); } // sleep forever
             
-            epd_wakeup();
+            // wake up the ePaper and put the temperatures on it
             ePaperWeather epw = ePaperWeather(Temp, HiTemp, DewPoint, show_lo_bat, show_hi_bat);
             
-            //TODO: implement a proper wait for next time and sleep schedule
-            
-            delay(60000);
+            if (Verbosity > 0)
+            {
+                char strLog[50] = "";
+                sprintf(strLog, "T: %3.2f (hi %3.2f) F\nDP: %3.2f F", Temp, HiTemp, DewPoint);
+                Particle.publish("Updated", strLog, PRIVATE);
+                
+                sprintf(strLog, "Battery: %2.1f", bat_percent);
+                Particle.publish("Battery", strLog, PRIVATE);
+            }
         }
+        // THIS WILL NEVER LOOP unless we're in service mode
+        // so leave some time to receive commands or press the service mode button
+        delay(5000);
+        waitForNextTime(); // either sleep or delay, depending on whether we're in service mode
     }
-    else
-    {
-        // wifi wasn't ready, give it a sec
-        delay(1000);
-    }
+    // wifi wasn't ready, give it a sec
+    delay(1000);
 }
 
 
 // Publish a weathermojo_request event
-// The response will be hanlded elsewhere
+// The response will be hanlded in receive_cheez
 // return true if it seems like we got a response
 // return false if we timed out waiting for one
-bool request_cheez(void)
+bool request_cheez()
 {
     bool success = true;
     
@@ -126,15 +136,37 @@ void receive_cheez(const char *event, const char *data)
     else Particle.publish("Error", "Dew point out of bounds: %f", dF);
 }
 
+void waitForNextTime()
+{
+    //TODO: wake up one polling interval after we woke up
+    //      instead of one polling interval after we went to sleep
+    int interval;
+    if (Time.hour() >= LongSleepHour) interval = LongSleepInterval;
+    else interval = PollingInterval;
+
+    if (InServiceMode == 0)
+    {
+        System.sleep(SLEEP_MODE_DEEP, interval);
+    }
+    else // we're in service mode. still wait out the polling interval, but do it without sleeping
+    {
+        Theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
+        Theme.apply();
+        for (int i = 0; i < interval; i++) delay(1000);
+    }
+}
+
+void enterServiceMode() { InServiceMode = 1; }
+
 // Turn on our serial pin and define a wake-up pin
-void epd_init(void)
+void epd_init()
 {
 	Serial1.begin(115200);
 	pinMode(wake_epaper, OUTPUT);
 }
 
 // Wake the ePaper module with a pulse on the wake-up pin
-void epd_wakeup(void)
+void epd_wakeup()
 {
 	digitalWrite(wake_epaper, LOW);
 	delayMicroseconds(10);
