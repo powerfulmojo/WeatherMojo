@@ -12,5 +12,4 @@ project.properties
 *.ipch
 .vscode/
 target/
-*.cpp
 openweathermapkey.h
