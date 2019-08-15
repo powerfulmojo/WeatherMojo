@@ -3,7 +3,7 @@
  * 
  * Display weather information on a WaveShare 4.3" ePaper display epaper display
  * Publishes a weathermojo_request event to the Particle cloud. If there's 
- * another station running farecastmojo.ino, that station will respond with a
+ * another station running forecastmojo.ino, that station will respond with a
  * weathermojo_response containing weather info.
  * 
  * Uses a Particle Power Shield to manage battery power. 
