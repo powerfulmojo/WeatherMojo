@@ -3,7 +3,7 @@
  * 
  * Display weather information on a WaveShare 4.3" ePaper display epaper display
  * Publishes a weathermojo_request event to the Particle cloud. If there's 
- * another station running forecastmojo.ino, that station will respond with a
+ * another station running farecastmojo.ino, that station will respond with a
  * weathermojo_response containing weather info.
  * 
  * Uses a Particle Power Shield to manage battery power. 
@@ -16,8 +16,8 @@
  * Connections:
  * D2 : Waveshare wake-up (yellow)
  * D4 : PowerShield USBPG
- * D6 : "Service mode" switch (momentary, normally open, connects to GND)
- * GND: Waveshare ground (black)
+ * D6 : Service mode switch (momentary, normally open, connects to GND)
+ * GND: Waveshare ground (black), service mode switch, particle wake-up switch
  * TX : Waveshare transmit (green)
  * RX : Waveshare receive (white)
  * 
@@ -35,9 +35,9 @@ int pwr_connected = D4; // connected to power shield "USB Good" (INPUT_PULLUP)
 int service_mode = D6;  // momentary switch connects GND to D6 (INPUT_PULLUP)
 
 int Tzone  = -7;                // time zone
-int Verbosity = 1;              // 0: only errors, 1: weather updates and errors
+int Verbosity = 1;              // 0: only errors, 1: updates and errors
 int InServiceMode = 0;          // 1 means we're in service mode, don't sleep
-int PollingInterval = 1800;     // seconds 
+int PollingMins[] = {1, 21, 41};// minutes after the hour to update weather, sorted ascending (always update once at start-up)
 int LongSleepHour = 23;         // the first update on or after this hour will result in a long sleep
 int LongSleepInterval = 18000;  // how long to sleep for a long sleep (seconds)
 float LoBatThreshold = 15;      // display a low battery icon at this %
@@ -161,27 +161,59 @@ void receive_cheez(const char *event, const char *data)
     else Particle.publish("Error", "Dew point out of bounds: %f", dF);
 }
 
+// if we're in normal mode, go into deep sleep 
+// if we're in service mode, don't go into deep sleep, use delay() and stay on the wifi
 void waitForNextTime()
 {
-    //TODO: wake up one polling interval after we woke up
-    //      instead of one polling interval after we went to sleep
-    int interval;
-    if (Time.hour() >= LongSleepHour) interval = LongSleepInterval;
-    else interval = PollingInterval;
-
+    int sleepSeconds = secondsToNextTime();
+    
     if (InServiceMode == 0)
     {
-        System.sleep(SLEEP_MODE_DEEP, interval);
+        System.sleep(SLEEP_MODE_DEEP, sleepSeconds);
     }
     else // we're in service mode. still wait out the polling interval, but do it without sleeping
     {
         Theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
         Theme.apply();
-        for (int i = 0; i < interval; i++) delay(1000);
+        for (int i = 0; i < sleepSeconds; i++) delay(1000);
     }
 }
 
-void enterServiceMode() { InServiceMode = 1; }
+// return the number of seconds to sleep so we wake up again at the right time past the hour
+// minutes past the hour when we should wake up are in the global PollingMins[]
+int secondsToNextTime()
+{
+    int sleepSeconds = 0;
+    int currentMinute = Time.minute(); 
+    int updateMinute = PollingMins[0]; 
+    int itemCount = (sizeof(PollingMins)/sizeof(*PollingMins));
+    for (int i = 1; i < itemCount; i++)
+    {
+        if (currentMinute < PollingMins[i])
+        {
+            updateMinute = PollingMins[i];
+            break;
+        }
+    }
+    // seconds remaining between now and next polling minute
+    if (updateMinute < currentMinute) updateMinute += 60;
+    sleepSeconds = ((updateMinute - currentMinute) * 60) - Time.second();
+
+    if (Verbosity > 0) { 
+        char strLog[50] = "";
+        sprintf(strLog, "currMin: %d, updateMin: %d, sleepSecs: %d", currentMinute, updateMinute, sleepSeconds);
+        Particle.publish("Sleeping", strLog, PRIVATE);
+    }
+
+    return sleepSeconds;
+}
+
+// set a global var that will tell waitForNextTime() not to go into deep sleep
+// useful for keeping the Photon awake long enough to flash new code
+void enterServiceMode() 
+{ 
+    InServiceMode = 1;  
+}
 
 // Turn on our serial pin and define a wake-up pin
 void epd_init()
@@ -194,10 +226,9 @@ void epd_init()
 void epd_wakeup()
 {
 	digitalWrite(wake_epaper, LOW);
-	delayMicroseconds(10);
+	delayMicroseconds(100);
 	digitalWrite(wake_epaper, HIGH);
-	delayMicroseconds(500);
+	delayMicroseconds(200);
 	digitalWrite(wake_epaper, LOW);
-	delay(10);
 }
 
