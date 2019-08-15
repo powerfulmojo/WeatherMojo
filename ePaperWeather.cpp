@@ -11,7 +11,7 @@ char ePaperWeather::_lilPrefix = 'S';
 int ePaperWeather::_bigWidths[10] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
 int ePaperWeather::_lilWidths[10] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
 
-enum { UPDATE_TEMP, UPDATE_HI_TEMP, UPDATE_DEW_POINT };
+enum { TEMP, HI_TEMP, DEW_POINT };
 
 int ePaperWeather::_batPosition[2] = {524, 452};
 int ePaperWeather::_bigHeight = 217;
@@ -31,13 +31,13 @@ int ePaperWeather::_computeLeftEdge(bool isNegative, int hundreds, int tens, int
     int width = 0;
     
     if (isNegative) width += 30;
-    if (hundreds > 0) width += (type == UPDATE_TEMP) ? _bigWidths[hundreds] : _lilWidths[hundreds];
-    if (tens > 0 || hundreds > 0) width += (type == UPDATE_TEMP) ? _bigWidths[tens] : _lilWidths[tens];
-    width += (type == UPDATE_TEMP) ? _bigWidths[ones] : _lilWidths[ones];
+    if (hundreds > 0) width += (type == TEMP) ? _bigWidths[hundreds] : _lilWidths[hundreds];
+    if (tens > 0 || hundreds > 0) width += (type == TEMP) ? _bigWidths[tens] : _lilWidths[tens];
+    width += (type == TEMP) ? _bigWidths[ones] : _lilWidths[ones];
     
-    if (type == UPDATE_TEMP) leftEdge = (int) 300 - (width / 2);
-    if (type == UPDATE_DEW_POINT) leftEdge = (int) 150 - (width / 2);
-    if (type == UPDATE_HI_TEMP) leftEdge = (int) 450 - (width /2);
+    if (type == TEMP) leftEdge = (int) 300 - (width / 2);
+    if (type == DEW_POINT) leftEdge = (int) 150 - (width / 2);
+    if (type == HI_TEMP) leftEdge = (int) 450 - (width /2);
     
     return leftEdge;    
 }
@@ -53,19 +53,19 @@ int ePaperWeather::_roundTemp(double Temp)
     return t;
 }
 
-// display a temperature of a type UPDATE_TEMP (big, top center), UPDATE_HI_TEMP (small, lower right), 
-// or UPDATE_DEW_POINT (small, lower left).
+// display a temperature of a type TEMP (big, top center), HI_TEMP (small, lower right), 
+// or DEW_POINT (small, lower left).
 void ePaperWeather::_displayTemp(bool isNegative, int huns, int tens, int ones, int type)
 {
     // where to draw each thing
-    int ls[] = {0, 304, 0};     // left edges of drawing areas
-    int ts[] = {138, 563, 563}; // top edges
-    int rs[] = {500, 600, 290}; // right edges
-    char prefix = (type == UPDATE_TEMP) ? _bigPrefix : _lilPrefix;
+    int ts[3]; ts[TEMP] = 138; ts[HI_TEMP] = 563; ts[DEW_POINT] = 563; // top edges of drawing areas
+    int ls[3]; ls[TEMP] = 0;   ls[HI_TEMP] = 304; ls[DEW_POINT] = 0;   // left edges
+    int rs[3]; rs[TEMP] = 500; rs[HI_TEMP] = 600; rs[DEW_POINT] = 290; // right edges
+    char prefix = (type == TEMP) ? _bigPrefix : _lilPrefix;
  
     // blank out the old value
     epd_set_color(WHITE, BLACK); // white rectangles to erase old data
-    epd_fill_rect(ls[type], ts[type], rs[type], (ts[type] + ((type == UPDATE_TEMP) ? _bigHeight : _lilHeight)));
+    epd_fill_rect(ls[type], ts[type], rs[type], (ts[type] + ((type == TEMP) ? _bigHeight : _lilHeight)));
     epd_set_color(BLACK, WHITE); // back to black on white
    
     int x = _computeLeftEdge(isNegative, huns, tens, ones, type);
@@ -85,14 +85,14 @@ void ePaperWeather::_displayTemp(bool isNegative, int huns, int tens, int ones, 
     {
         sprintf(filename, "%c1.BMP", prefix);
         epd_disp_bitmap(filename, x, y);
-        x = x + ((type == UPDATE_TEMP) ? _bigWidths[1] : _lilWidths[1]);
+        x = x + ((type == TEMP) ? _bigWidths[1] : _lilWidths[1]);
     }
     
     if (tens > 0 || huns > 0) // display a tens digit if the number is 2 or 3 digits long
     {
         sprintf(filename, "%c%d.BMP", prefix, tens);
         epd_disp_bitmap(filename, x, y);
-        x = x + ((type == UPDATE_TEMP) ? _bigWidths[tens] : _lilWidths[tens]);
+        x = x + ((type == TEMP) ? _bigWidths[tens] : _lilWidths[tens]);
     }
     
     sprintf(filename, "%c%d.BMP", prefix, ones); // always display a ones digit
@@ -137,9 +137,9 @@ void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, b
     
     epd_clear();
     epd_disp_bitmap(_backgroundBmp, 0, 0);
-    _displayTemp(Temp, UPDATE_TEMP);
-    _displayTemp(HiTemp, UPDATE_HI_TEMP);
-    _displayTemp(DewPoint, UPDATE_DEW_POINT);
+    _displayTemp(Temp, TEMP);
+    _displayTemp(HiTemp, HI_TEMP);
+    _displayTemp(DewPoint, DEW_POINT);
     _updateBat(loBatt, hiBatt);
     epd_update();
     
