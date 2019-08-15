@@ -1,178 +1,154 @@
-#include <Particle.h>
-#define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
-#include <ArduinoJson.h>
-#include <PowerShield.h>
 #include "ePaperWeather.h"
 #include "epd.h"
+#include <cstdio>
+#include <cstdlib>
 
-int wake_epaper = D2;   // epaper wakeup pin
-int pwr_connected = D4; // connected to power shield "USB Good" (INPUT_PULLUP)
-int service_mode = D6;  // momentary switch connects GND to D6 (INPUT_PULLUP)
+char ePaperWeather::_backgroundBmp[9] = "BACK.BMP";
+char ePaperWeather::_loBatBmp[11] = "LOBAT.BMP";
+char ePaperWeather::_hiBatBmp[11] = "HIBAT.BMP";
+char ePaperWeather::_bigPrefix = 'B';
+char ePaperWeather::_lilPrefix = 'S';
+int ePaperWeather::_bigWidths[10] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
+int ePaperWeather::_lilWidths[10] = {87, 53, 77, 74, 82, 80, 80, 82, 74, 79};
 
-int Tzone  = -7;                // time zone
-int Verbosity = 1;              // 0: only errors, 1: weather updates and errors
-int InServiceMode = 0;          // 1 means we're in service mode, don't sleep
-int PollingInterval = 1800;     // seconds 
-int LongSleepHour = 23;         // the first update on or after this hour will result in a long sleep
-int LongSleepInterval = 18000;  // how long to sleep for a long sleep (seconds)
-float LoBatThreshold = 15;      // display a low battery icon at this %
-float HiBatThreshold = 95;      // display a full battery icon when USB is connected and battery is this %
-float PermanentShutdown = 10;   // if battery drops to this %, don't wake up next time
+enum { TEMP, HI_TEMP, DEW_POINT };
 
-double Temp = -199;
-double HiTemp = -199;
-double DewPoint = -199;
+int ePaperWeather::_batPosition[2] = {524, 452};
+int ePaperWeather::_bigHeight = 217;
+int ePaperWeather::_lilHeight = 110;
 
-PowerShield BatteryMonitor;
-LEDSystemTheme Theme;       // Custom LED theme, set in setup()
-String LastUpdateTimeString = "";
-
-void setup() {
-    Time.zone(Tzone);
+// return the x position of the left edge of the drawing box for 
+// one of the temperatures displayed on the ePaper
+// numbers are variable-width, so compute full width then subtract
+// half of it from the center line of the drawing box.
+// The center lines are:
+//     main temp: 300
+//     hi temp:   450
+//     dew point: 150 
+int ePaperWeather::_computeLeftEdge(bool isNegative, int hundreds, int tens, int ones, int type)
+{
+    int leftEdge = 0;
+    int width = 0;
     
-    // get the battery meter ready to work
-    BatteryMonitor.begin();     
-    BatteryMonitor.quickStart();
-    pinMode(pwr_connected, INPUT_PULLUP);
-    pinMode(service_mode, INPUT_PULLUP);
-    attachInterrupt(service_mode, enterServiceMode, FALLING);
+    if (isNegative) width += 30;
+    if (hundreds > 0) width += (type == TEMP) ? _bigWidths[hundreds] : _lilWidths[hundreds];
+    if (tens > 0 || hundreds > 0) width += (type == TEMP) ? _bigWidths[tens] : _lilWidths[tens];
+    width += (type == TEMP) ? _bigWidths[ones] : _lilWidths[ones];
     
-    // turn off the breathing cyan LED
-    Theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, 0x00000000); 
-    Theme.apply(); 
-
-    // get the epaper display ready to work
-	epd_init();                 
+    if (type == TEMP) leftEdge = (int) 300 - (width / 2);
+    if (type == DEW_POINT) leftEdge = (int) 150 - (width / 2);
+    if (type == HI_TEMP) leftEdge = (int) 450 - (width /2);
     
-    // listen for responses to our published weathermojo_request events
-    Particle.subscribe("weathermojo_response", receive_cheez, MY_DEVICES);
+    return leftEdge;    
 }
 
 
+// take a double and return a rounded integer between -199 and 199
+int ePaperWeather::_roundTemp(double Temp)
+{
+    Temp = Temp + 0.5 - (Temp < 0);
+    int t = (int)Temp;
+    if (t < -199) t = -199;
+    if (t >  199) t =  199;
+    return t;
+}
 
-void loop() {
-    bool wifiReady = WiFi.ready();
+// display a temperature of a type TEMP (big, top center), HI_TEMP (small, lower right), 
+// or DEW_POINT (small, lower left).
+void ePaperWeather::_displayTemp(bool isNegative, int huns, int tens, int ones, int type)
+{
+    // where to draw each thing
+    int ts[3]; ts[TEMP] = 138; ts[HI_TEMP] = 563; ts[DEW_POINT] = 563; // top edges of drawing areas
+    int ls[3]; ls[TEMP] = 0;   ls[HI_TEMP] = 304; ls[DEW_POINT] = 0;   // left edges
+    int rs[3]; rs[TEMP] = 500; rs[HI_TEMP] = 600; rs[DEW_POINT] = 290; // right edges
+    char prefix = (type == TEMP) ? _bigPrefix : _lilPrefix;
+ 
+    // blank out the old value
+    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
+    epd_fill_rect(ls[type], ts[type], rs[type], (ts[type] + ((type == TEMP) ? _bigHeight : _lilHeight)));
+    epd_set_color(BLACK, WHITE); // back to black on white
+   
+    int x = _computeLeftEdge(isNegative, huns, tens, ones, type);
+    int y = ts[type];
 
-    if (wifiReady) 
+    char filename[7] = "";
+    
+    // is it negative? draw a 20x15 rectangle to the left
+    // Only dew point can be negative in my neighborhood :-)
+    if (isNegative) 
     {
-        if (request_cheez()) // we did not time out waiting for a response
-        {
-            // figure out if we need to display battery indicators
-            float bat_percent = BatteryMonitor.getSoC();
-            bool show_lo_bat = (bat_percent < LoBatThreshold);
-            bool show_hi_bat = (bat_percent > HiBatThreshold && digitalRead(pwr_connected) == LOW);
-            if (bat_percent < PermanentShutdown) { epd_clear(); System.sleep(SLEEP_MODE_DEEP); } // sleep forever
+        epd_fill_rect(x, (y + 55), (x + 20), (y + 72));
+        x = x + 30;
+    }
+    
+    if (huns > 0) // display a 1
+    {
+        sprintf(filename, "%c1.BMP", prefix);
+        epd_disp_bitmap(filename, x, y);
+        x = x + ((type == TEMP) ? _bigWidths[1] : _lilWidths[1]);
+    }
+    
+    if (tens > 0 || huns > 0) // display a tens digit if the number is 2 or 3 digits long
+    {
+        sprintf(filename, "%c%d.BMP", prefix, tens);
+        epd_disp_bitmap(filename, x, y);
+        x = x + ((type == TEMP) ? _bigWidths[tens] : _lilWidths[tens]);
+    }
+    
+    sprintf(filename, "%c%d.BMP", prefix, ones); // always display a ones digit
+    epd_disp_bitmap(filename, x, y);
+    
+}
+
+// break a temp into digits and call a better _displayTemp
+void ePaperWeather::_displayTemp(double temp, int type)
+{
+     // separate out the digits to be displayed one at a time
+    bool isNegative = (temp < 0);
+    int huns = (int)(abs(temp) >= 100);
+    int tens = (int)(abs(temp - (huns * 100)) / 10);
+    int ones = (int)(abs(temp) % 10);
+
+    _displayTemp (isNegative, huns, tens, ones, type);
+}
+
+void ePaperWeather::_blankBat()
+{
+    epd_set_color(WHITE, BLACK); // white rectangles to erase old data
+    epd_fill_rect(_batPosition[0], _batPosition[1], _batPosition[0] + 48, _batPosition[1] + 24);
+    epd_set_color(BLACK, WHITE); // back to black on white
+}
+    
+void ePaperWeather::_updateBat(bool lo, bool hi)
+{
+    _blankBat();
+
+    if (lo) epd_disp_bitmap(_loBatBmp, _batPosition[0], _batPosition[1]);
+    if (hi) epd_disp_bitmap(_hiBatBmp, _batPosition[0], _batPosition[1]);
+}
+
+void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt)
+{
+    epd_wakeup();
             
-            // wake up the ePaper and put the temperatures on it
-            ePaperWeather epw = ePaperWeather(Temp, HiTemp, DewPoint, show_lo_bat, show_hi_bat);
-            
-            if (Verbosity > 0)
-            {
-                char strLog[50] = "";
-                sprintf(strLog, "T: %3.2f (hi %3.2f) F\nDP: %3.2f F", Temp, HiTemp, DewPoint);
-                Particle.publish("Updated", strLog, PRIVATE);
-                
-                sprintf(strLog, "Battery: %2.1f", bat_percent);
-                Particle.publish("Battery", strLog, PRIVATE);
-            }
-        }
-        // THIS WILL NEVER LOOP unless we're in service mode
-        // so leave some time to receive commands or press the service mode button
-        delay(5000);
-        waitForNextTime(); // either sleep or delay, depending on whether we're in service mode
-    }
-    // wifi wasn't ready, give it a sec
-    delay(1000);
-}
-
-
-// Publish a weathermojo_request event
-// The response will be hanlded in receive_cheez
-// return true if it seems like we got a response
-// return false if we timed out waiting for one
-bool request_cheez()
-{
-    bool success = true;
+    epd_set_memory(MEM_TF);     // flash memory (MEM_NAND is onboard, MEM_TF is SD Card)
+    epd_screen_rotation(3);     // sideways
+    epd_set_color(BLACK, WHITE);// black on white
     
-    Particle.publish("weathermojo_request", "Need a cheez", PRIVATE);
-    String originalUpdateTime = LastUpdateTimeString;
+    epd_clear();
+    epd_disp_bitmap(_backgroundBmp, 0, 0);
+    _displayTemp(Temp, TEMP);
+    _displayTemp(HiTemp, HI_TEMP);
+    _displayTemp(DewPoint, DEW_POINT);
+    _updateBat(loBatt, hiBatt);
+    epd_update();
     
-    int maxWait = 30;
-    int waited = 0;
-
-    while(LastUpdateTimeString == originalUpdateTime && waited < maxWait)
-    {
-        if (waited > 0) delay(1000);
-        waited = waited + 1;
-        if (waited >= maxWait) 
-        {
-            Particle.publish("Error", "No cheez.", PRIVATE);
-            success = false;
-        }
-    }
-    return success;
+    epd_enter_stopmode();
 }
 
-// Read the JSON doc out of the weathermojo_response event
-// set the global vars Temp, HiTemp, and DewPoint 
-// Publish error events if anything goes wrong
-void receive_cheez(const char *event, const char *data)
+ePaperWeather::ePaperWeather() { }
+
+ePaperWeather::ePaperWeather(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt)
 {
-    DynamicJsonDocument weatherDoc(1600);
-    DeserializationError error = deserializeJson(weatherDoc, data);
-    if(!error) LastUpdateTimeString = Time.format(Time.now(),TIME_FORMAT_ISO8601_FULL);
-    else Particle.publish("Error", "Problem getting json from the other weather station", PRIVATE);
-
-    double tF = weatherDoc["data"][0]["temp"];
-    if (tF > 10 && tF < 130) Temp = tF;
-    else Particle.publish("Error", "Temp out of bounds: %f", tF);
-    
-    double hF = weatherDoc["data"][0]["max_temp"];
-    if (hF > 10 && hF < 130) HiTemp = hF;
-    else Particle.publish("Error", "High temp out of bounds: %f", hF);
-    
-    double dF = weatherDoc["data"][0]["dewpt"];
-    if (dF > -30 && dF < 90) DewPoint = dF;
-    else Particle.publish("Error", "Dew point out of bounds: %f", dF);
+    this->UpdateDisplay(Temp, HiTemp, DewPoint, loBatt, hiBatt);
 }
-
-void waitForNextTime()
-{
-    //TODO: wake up one polling interval after we woke up
-    //      instead of one polling interval after we went to sleep
-    int interval;
-    if (Time.hour() >= LongSleepHour) interval = LongSleepInterval;
-    else interval = PollingInterval;
-
-    if (InServiceMode == 0)
-    {
-        System.sleep(SLEEP_MODE_DEEP, interval);
-    }
-    else // we're in service mode. still wait out the polling interval, but do it without sleeping
-    {
-        Theme.setColor(LED_SIGNAL_CLOUD_CONNECTED, RGB_COLOR_CYAN); 
-        Theme.apply();
-        for (int i = 0; i < interval; i++) delay(1000);
-    }
-}
-
-void enterServiceMode() { InServiceMode = 1; }
-
-// Turn on our serial pin and define a wake-up pin
-void epd_init()
-{
-	Serial1.begin(115200);
-	pinMode(wake_epaper, OUTPUT);
-}
-
-// Wake the ePaper module with a pulse on the wake-up pin
-void epd_wakeup()
-{
-	digitalWrite(wake_epaper, LOW);
-	delayMicroseconds(10);
-	digitalWrite(wake_epaper, HIGH);
-	delayMicroseconds(500);
-	digitalWrite(wake_epaper, LOW);
-	delay(10);
-}
-
