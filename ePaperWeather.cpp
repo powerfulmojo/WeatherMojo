@@ -150,6 +150,10 @@ void ePaperWeather::UpdateDisplay()
 
 ePaperWeather::ePaperWeather() { }
 
+/*********************************************************
+ * One-step constructor
+ * Send all the info you need to display then display it
+ * ********************************************************/
 ePaperWeather::ePaperWeather(double Temperature, double HiTemperature, double DewPointTemperature, bool loBatt, bool hiBatt)
 {
     this->Temp = Temperature;
