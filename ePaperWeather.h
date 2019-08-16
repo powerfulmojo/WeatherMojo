@@ -27,9 +27,14 @@ private:
 
 
 public:
+    int Temp;
+    int HiTemp;
+    int DewPoint;
+    bool BatteryLow;
+    bool BatteryHigh;
     ePaperWeather();
     ePaperWeather(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt);
-    void UpdateDisplay(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt);
+    void UpdateDisplay();
 };
 
 #endif

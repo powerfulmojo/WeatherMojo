@@ -17,6 +17,8 @@ int ePaperWeather::_batPosition[2] = {524, 452};
 int ePaperWeather::_bigHeight = 217;
 int ePaperWeather::_lilHeight = 110;
 
+
+
 // return the x position of the left edge of the drawing box for 
 // one of the temperatures displayed on the ePaper
 // numbers are variable-width, so compute full width then subtract
@@ -127,7 +129,7 @@ void ePaperWeather::_updateBat(bool lo, bool hi)
     if (hi) epd_disp_bitmap(_hiBatBmp, _batPosition[0], _batPosition[1]);
 }
 
-void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt)
+void ePaperWeather::UpdateDisplay()
 {
     epd_wakeup();
             
@@ -140,7 +142,7 @@ void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, b
     _displayTemp(Temp, TEMP);
     _displayTemp(HiTemp, HI_TEMP);
     _displayTemp(DewPoint, DEW_POINT);
-    _updateBat(loBatt, hiBatt);
+    _updateBat(BatteryLow, BatteryHigh);
     epd_update();
     
     epd_enter_stopmode();
@@ -148,7 +150,12 @@ void ePaperWeather::UpdateDisplay(double Temp, double HiTemp, double DewPoint, b
 
 ePaperWeather::ePaperWeather() { }
 
-ePaperWeather::ePaperWeather(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt)
+ePaperWeather::ePaperWeather(double Temperature, double HiTemperature, double DewPointTemperature, bool loBatt, bool hiBatt)
 {
-    this->UpdateDisplay(Temp, HiTemp, DewPoint, loBatt, hiBatt);
+    this->Temp = Temperature;
+    this->HiTemp = HiTemperature;
+    this->DewPoint = DewPointTemperature;
+    this->BatteryLow = loBatt;
+    this->BatteryHigh = hiBatt;
+    this->UpdateDisplay();
 }
