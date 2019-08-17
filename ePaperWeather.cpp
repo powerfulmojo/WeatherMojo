@@ -4,8 +4,8 @@
 #include <cstdlib>
 
 char ePaperWeather::_backgroundBmp[9] = "BACK.BMP";
-char ePaperWeather::_loBatBmp[11] = "LOBAT.BMP";
-char ePaperWeather::_hiBatBmp[11] = "HIBAT.BMP";
+char ePaperWeather::_loBatBmp[11] = "LOBATT.BMP";
+char ePaperWeather::_hiBatBmp[11] = "HIBATT.BMP";
 char ePaperWeather::_bigPrefix = 'B';
 char ePaperWeather::_lilPrefix = 'S';
 int ePaperWeather::_bigWidths[10] = {157, 92, 150, 141, 157, 151, 150, 157, 141, 150};
@@ -75,8 +75,7 @@ void ePaperWeather::_displayTemp(bool isNegative, int huns, int tens, int ones, 
 
     char filename[7] = "";
     
-    // is it negative? draw a 20x15 rectangle to the left
-    // Only dew point can be negative in my neighborhood :-)
+    // is it negative? draw a 20x15 rectangle to the left. Only dew point can be negative in my neighborhood :-)
     if (isNegative) 
     {
         epd_fill_rect(x, (y + 55), (x + 20), (y + 72));

@@ -83,8 +83,9 @@ void loop() {
         {
             // figure out if we need to display battery indicators
             float bat_percent = BatteryMonitor.getSoC();
+            bool usb_connected = (digitalRead(pwr_connected) == LOW);
             bool show_lo_bat = (bat_percent < LoBatThreshold);
-            bool show_hi_bat = (bat_percent > HiBatThreshold && digitalRead(pwr_connected) == LOW);
+            bool show_hi_bat = (bat_percent > HiBatThreshold && usb_connected);
             
             // wake up the ePaper and put the temperatures on it
             ePaperWeather epw = ePaperWeather(Temp, HiTemp, DewPoint, show_lo_bat, show_hi_bat);
@@ -102,7 +103,7 @@ void loop() {
                 sprintf(strLog, "T: %3.2f (hi %3.2f) F\nDP: %3.2f F", Temp, HiTemp, DewPoint);
                 Particle.publish("Updated", strLog, PRIVATE);
                 
-                sprintf(strLog, "Battery: %2.1f", bat_percent);
+                sprintf(strLog, "Battery: %2.1f usb %sconnected", bat_percent, (usb_connected ? "" : "not "));
                 Particle.publish("Battery", strLog, PRIVATE);
             }
         }
