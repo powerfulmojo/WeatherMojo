@@ -35,6 +35,8 @@ public:
     ePaperWeather();
     ePaperWeather(double Temp, double HiTemp, double DewPoint, bool loBatt, bool hiBatt);
     void UpdateDisplay();
+    void Sleep();
+    void Clear();
 };
 
 #endif

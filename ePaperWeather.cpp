@@ -148,6 +148,16 @@ void ePaperWeather::UpdateDisplay()
     epd_enter_stopmode();
 }
 
+void ePaperWeather::Sleep()
+{
+    epd_enter_stopmode();
+}
+
+void ePaperWeather::Clear()
+{
+    epd_clear();
+}
+
 ePaperWeather::ePaperWeather() { }
 
 /*********************************************************
@@ -156,10 +166,10 @@ ePaperWeather::ePaperWeather() { }
  * ********************************************************/
 ePaperWeather::ePaperWeather(double Temperature, double HiTemperature, double DewPointTemperature, bool loBatt, bool hiBatt)
 {
-    this->Temp = Temperature;
-    this->HiTemp = HiTemperature;
-    this->DewPoint = DewPointTemperature;
-    this->BatteryLow = loBatt;
-    this->BatteryHigh = hiBatt;
+    Temp = Temperature;
+    HiTemp = HiTemperature;
+    DewPoint = DewPointTemperature;
+    BatteryLow = loBatt;
+    BatteryHigh = hiBatt;
     this->UpdateDisplay();
 }

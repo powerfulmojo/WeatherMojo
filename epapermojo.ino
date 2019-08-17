@@ -28,7 +28,6 @@
 #include <ArduinoJson.h>
 #include <PowerShield.h>
 #include "ePaperWeather.h"
-#include "epd.h"
 
 int wake_epaper = D2;   // epaper wakeup pin
 int pwr_connected = D4; // connected to power shield "USB Good" (INPUT_PULLUP)
@@ -86,10 +85,16 @@ void loop() {
             float bat_percent = BatteryMonitor.getSoC();
             bool show_lo_bat = (bat_percent < LoBatThreshold);
             bool show_hi_bat = (bat_percent > HiBatThreshold && digitalRead(pwr_connected) == LOW);
-            if (bat_percent < PermanentShutdown) { epd_clear(); System.sleep(SLEEP_MODE_DEEP); } // sleep forever
             
             // wake up the ePaper and put the temperatures on it
             ePaperWeather epw = ePaperWeather(Temp, HiTemp, DewPoint, show_lo_bat, show_hi_bat);
+            if (bat_percent < PermanentShutdown) // sleep forever
+            { 
+                epw.Clear(); 
+                epw.Sleep(); 
+                if (Verbosity > 0) Particle.publish("Battery", "Battery was too low, going into deep sleep.", PRIVATE);
+                System.sleep(SLEEP_MODE_DEEP); 
+            } 
             
             if (Verbosity > 0)
             {
