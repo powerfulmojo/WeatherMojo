@@ -1,7 +1,7 @@
 /********************************************************************************
  * epapermojo.ino
  * 
- * Display weather information on a WaveShare 4.3" ePaper display epaper display
+ * Display weather information on a WaveShare 4.3" ePaper display
  * Publishes a weathermojo_request event to the Particle cloud. If there's 
  * another station running farecastmojo.ino, that station will respond with a
  * weathermojo_response containing weather info.
@@ -36,7 +36,7 @@ int service_mode = D6;  // momentary switch connects GND to D6 (INPUT_PULLUP)
 int Tzone  = -7;                // time zone
 int Verbosity = 1;              // 0: only errors, 1: updates and errors
 int InServiceMode = 0;          // 1 means we're in service mode, don't sleep
-int PollingMins[] = {1, 21, 41};// minutes after the hour to update weather, sorted ascending (always update once at start-up)
+int PollingMins[] = {1, 31};// minutes after the hour to update weather, sorted ascending (always update once at start-up)
 int LongSleepHour = 23;         // the first update on or after this hour will result in a long sleep
 int LongSleepInterval = 18000;  // how long to sleep for a long sleep (seconds)
 float LoBatThreshold = 15;      // display a low battery icon at this %
@@ -201,9 +201,11 @@ int secondsToNextTime()
             break;
         }
     }
-    // seconds remaining between now and next polling minute
+    
     if (updateMinute < currentMinute) updateMinute += 60;
-    sleepSeconds = ((updateMinute - currentMinute) * 60) - Time.second();
+    
+    if (Time.hour() >= LongSleepHour) sleepSeconds = LongSleepInterval;
+    else sleepSeconds = ((updateMinute - currentMinute) * 60) - Time.second();
 
     if (Verbosity > 0) { 
         char strLog[50] = "";
