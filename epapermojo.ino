@@ -94,7 +94,7 @@ void loop() {
             if (Verbosity > 0)
             {
                 char strLog[250] = "";
-                sprintf(strLog, "%3.1f,%3.2f,%3.1f,%3.1f,%s", Temp, HiTemp, DewPoint, bat_percent, (usb_connected ? "true" : "false"));
+                sprintf(strLog, "%3.1f,%3.1f,%3.1f,%3.1f,%s", Temp, HiTemp, DewPoint, bat_percent, (usb_connected ? "true" : "false"));
                  Particle.publish("Update", strLog, PRIVATE);
             }
 
