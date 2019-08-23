@@ -3,7 +3,7 @@
  * 
  * Display weather information on a WaveShare 4.3" ePaper display
  * Publishes a weathermojo_request event to the Particle cloud. If there's 
- * another station running farecastmojo.ino, that station will respond with a
+ * another station running farecastmojo.ino, that station will publish a
  * weathermojo_response containing weather info.
  * 
  * Uses a Particle Power Shield to manage battery power. 
@@ -13,13 +13,14 @@
  * waveshare docs are at:
  * https://www.waveshare.com/wiki/4.3inch_e-Paper_UART_Module
  * 
- * Connections:
+ * Particle Connections:
  * D2 : Waveshare wake-up (yellow)
  * D4 : PowerShield USBPG
  * D6 : Service mode switch (momentary, normally open, connects to GND)
  * GND: Waveshare ground (black), service mode switch, particle wake-up switch
  * TX : Waveshare transmit (green)
  * RX : Waveshare receive (white)
+ * RST: Reset switch (momentary, normally open, connects to GND)
  * 
  * ******************************************************************************/
 
@@ -28,6 +29,7 @@
 #include <ArduinoJson.h>
 #include <PowerShield.h>
 #include "ePaperWeather.h"
+#include "epd.h"
 
 int wake_epaper = D2;   // epaper wakeup pin
 int pwr_connected = D4; // connected to power shield "USB Good" (INPUT_PULLUP)
@@ -38,7 +40,7 @@ int Verbosity = 1;              // 0: only errors, 1: updates and errors
 int InServiceMode = 0;          // 1 means we're in service mode, don't sleep
 int PollingMins[] = {1, 31};// minutes after the hour to update weather, sorted ascending (always update once at start-up)
 int LongSleepHour = 23;         // the first update on or after this hour will result in a long sleep
-int LongSleepInterval = 18000;  // how long to sleep for a long sleep (seconds)
+int LongSleepInterval = 21600;  // how long to sleep for a long sleep (seconds)
 float LoBatThreshold = 15;      // display a low battery icon at this %
 float HiBatThreshold = 95;      // display a full battery icon when USB is connected and battery is this %
 float PermanentShutdown = 10;   // if battery drops to this %, don't wake up next time
@@ -89,6 +91,13 @@ void loop() {
             
             // wake up the ePaper and put the temperatures on it
             ePaperWeather epw = ePaperWeather(Temp, HiTemp, DewPoint, show_lo_bat, show_hi_bat);
+            if (Verbosity > 0)
+            {
+                char strLog[250] = "";
+                sprintf(strLog, "%3.1f,%3.2f,%3.1f,%3.1f,%s", Temp, HiTemp, DewPoint, bat_percent, (usb_connected ? "true" : "false"));
+                 Particle.publish("Update", strLog, PRIVATE);
+            }
+
             if (bat_percent < PermanentShutdown) // sleep forever
             { 
                 epw.Clear(); 
@@ -96,16 +105,6 @@ void loop() {
                 if (Verbosity > 0) Particle.publish("Battery", "Battery was too low, going into deep sleep.", PRIVATE);
                 System.sleep(SLEEP_MODE_DEEP); 
             } 
-            
-            if (Verbosity > 0)
-            {
-                char strLog[50] = "";
-                sprintf(strLog, "T: %3.2f (hi %3.2f) F\nDP: %3.2f F", Temp, HiTemp, DewPoint);
-                Particle.publish("Updated", strLog, PRIVATE);
-                
-                sprintf(strLog, "Battery: %2.1f usb %sconnected", bat_percent, (usb_connected ? "" : "not "));
-                Particle.publish("Battery", strLog, PRIVATE);
-            }
         }
         // THIS WILL NEVER LOOP unless we're in service mode
         // so leave some time to receive commands or press the service mode button

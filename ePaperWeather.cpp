@@ -2,6 +2,7 @@
 #include "epd.h"
 #include <cstdio>
 #include <cstdlib>
+#include <math.h>
 
 char ePaperWeather::_backgroundBmp[9] = "BACK.BMP";
 char ePaperWeather::_loBatBmp[11] = "LOBATT.BMP";
@@ -48,8 +49,8 @@ int ePaperWeather::_computeLeftEdge(bool isNegative, int hundreds, int tens, int
 // take a double and return a rounded integer between -199 and 199
 int ePaperWeather::_roundTemp(double Temp)
 {
-    Temp = Temp + 0.5 - (Temp < 0);
-    int t = (int)Temp;
+    double rTemp = round(Temp);
+    int t = (int)rTemp;
     if (t < -199) t = -199;
     if (t >  199) t =  199;
     return t;
@@ -165,10 +166,10 @@ ePaperWeather::ePaperWeather() { }
  * ********************************************************/
 ePaperWeather::ePaperWeather(double Temperature, double HiTemperature, double DewPointTemperature, bool loBatt, bool hiBatt)
 {
-    Temp = Temperature;
-    HiTemp = HiTemperature;
-    DewPoint = DewPointTemperature;
+    Temp = _roundTemp(Temperature);
+    HiTemp = _roundTemp(HiTemperature);
+    DewPoint = _roundTemp(DewPointTemperature);
     BatteryLow = loBatt;
     BatteryHigh = hiBatt;
-    this->UpdateDisplay();
+    UpdateDisplay();
 }
