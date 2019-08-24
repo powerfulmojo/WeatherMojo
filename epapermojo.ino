@@ -14,7 +14,7 @@
  * https://www.waveshare.com/wiki/4.3inch_e-Paper_UART_Module
  * 
  * Particle Connections:
- * D2 : Waveshare wake-up (yellow)
+ * D2 : Waveshare wake-up (yellow) // not actually used
  * D4 : PowerShield USBPG
  * D6 : Service mode switch (momentary, normally open, connects to GND)
  * GND: Waveshare ground (black), service mode switch, particle wake-up switch
@@ -31,7 +31,6 @@
 #include "ePaperWeather.h"
 #include "epd.h"
 
-int wake_epaper = D2;   // epaper wakeup pin
 int pwr_connected = D4; // connected to power shield "USB Good" (INPUT_PULLUP)
 int service_mode = D6;  // momentary switch connects GND to D6 (INPUT_PULLUP)
 
@@ -81,30 +80,36 @@ void loop() {
 
     if (wifiReady) 
     {
-        if (request_cheez()) // we did not time out waiting for a response
+        if (request_cheez()) 
         {
+            // we did not time out waiting for a response, so
+            // Temp, HiTemp, & DewPoint should have been set in receive_cheez()
+            
             // figure out if we need to display battery indicators
             float bat_percent = BatteryMonitor.getSoC();
             bool usb_connected = (digitalRead(pwr_connected) == LOW);
             bool show_lo_bat = (bat_percent < LoBatThreshold);
             bool show_hi_bat = (bat_percent > HiBatThreshold && usb_connected);
             
-            // wake up the ePaper and put the temperatures on it
+            // put the temperatures on the epaper
             ePaperWeather epw = ePaperWeather(Temp, HiTemp, DewPoint, show_lo_bat, show_hi_bat);
+            
             if (Verbosity > 0)
             {
-                char strLog[250] = "";
-                sprintf(strLog, "%3.1f,%3.1f,%3.1f,%3.1f,%s", Temp, HiTemp, DewPoint, bat_percent, (usb_connected ? "true" : "false"));
-                 Particle.publish("Update", strLog, PRIVATE);
+                char strLog[30] = "";
+                sprintf(strLog, "%3.1f,%3.1f,%2.1f,%3.1f,%s", Temp, HiTemp, DewPoint, bat_percent, (usb_connected ? "true" : "false"));
+                Particle.publish("Update", strLog, PRIVATE);
             }
 
-            if (bat_percent < PermanentShutdown) // sleep forever
+            if (bat_percent < PermanentShutdown && !InServiceMode) // sleep forever
             { 
                 epw.Clear(); 
                 epw.Sleep(); 
                 if (Verbosity > 0) Particle.publish("Battery", "Battery was too low, going into deep sleep.", PRIVATE);
                 System.sleep(SLEEP_MODE_DEEP); 
-            } 
+            }
+            
+            epw.Sleep();
         }
         // THIS WILL NEVER LOOP unless we're in service mode
         // so leave some time to receive commands or press the service mode button
@@ -226,16 +231,6 @@ void enterServiceMode()
 void epd_init()
 {
 	Serial1.begin(115200);
-	pinMode(wake_epaper, OUTPUT);
 }
 
-// Wake the ePaper module with a pulse on the wake-up pin
-void epd_wakeup()
-{
-	digitalWrite(wake_epaper, LOW);
-	delayMicroseconds(100);
-	digitalWrite(wake_epaper, HIGH);
-	delayMicroseconds(200);
-	digitalWrite(wake_epaper, LOW);
-}
 

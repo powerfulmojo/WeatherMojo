@@ -1,7 +1,9 @@
 #ifndef EPAPERWEATHER_H
 #define EPAPERWEATHER_H
 
-
+/*************************************
+* For a WaveShare 4.3" ePaper display
+*************************************/
 class ePaperWeather
 {
 

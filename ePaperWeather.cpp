@@ -19,7 +19,6 @@ int ePaperWeather::_bigHeight = 217;
 int ePaperWeather::_lilHeight = 110;
 
 
-
 // return the x position of the left edge of the drawing box for 
 // one of the temperatures displayed on the ePaper
 // numbers are variable-width, so compute full width then subtract
@@ -131,7 +130,7 @@ void ePaperWeather::_updateBat(bool lo, bool hi)
 
 void ePaperWeather::UpdateDisplay()
 {
-    epd_wakeup();
+    //epd_wakeup(); // don't think this is actually required the way we're using the display: it's awake on power-up.
             
     epd_set_memory(MEM_TF);     // flash memory (MEM_NAND is onboard, MEM_TF is SD Card)
     epd_screen_rotation(3);     // sideways
@@ -145,7 +144,7 @@ void ePaperWeather::UpdateDisplay()
     _updateBat(BatteryLow, BatteryHigh);
     epd_update();
     
-    epd_enter_stopmode();
+    // let the client do this    epd_enter_stopmode();
 }
 
 void ePaperWeather::Sleep()
@@ -156,6 +155,7 @@ void ePaperWeather::Sleep()
 void ePaperWeather::Clear()
 {
     epd_clear();
+    epd_update();
 }
 
 ePaperWeather::ePaperWeather() { }
